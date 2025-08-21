@@ -19,7 +19,6 @@ Thumbs.db
 .env.*
 
 # Build
-/dist/
 /build/
 
 # Logs
