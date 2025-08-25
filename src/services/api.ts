@@ -231,6 +231,7 @@ export const usersAPI = {
     phone_number?: string;
     department?: string;
     can_assign_tasks?: boolean;
+    mobille_no?: string;
   }): Promise<User> => {
     try {
       const response: AxiosResponse<User> = await api.post("/users", data);
@@ -254,7 +255,8 @@ export const usersAPI = {
       department: string;
       can_assign_tasks: boolean;
       canAssignTasks: boolean; // For frontend compatibility
-      isActive: boolean; // For frontend compatibility
+      isActive: boolean;
+      mobile_no?: string; // For frontend compatibility
     }>
   ): Promise<User> => {
     try {
