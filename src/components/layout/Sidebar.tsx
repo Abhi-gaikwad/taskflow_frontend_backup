@@ -104,12 +104,12 @@ export const Sidebar: React.FC = () => {
               <h2 className="text-xl font-bold text-gray-900 truncate">{appTitle}</h2>
               <div className="flex items-center space-x-2">
                 {user?.company?.name && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <span className="inline-flex items-center px-2 py-0.4 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                     Dashboard
                   </span>
                 )}
                 {user?.role === 'super_admin' && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  <span className="inline-flex items-center px-2 py-0.4 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                     Pro
                   </span>
                 )}
