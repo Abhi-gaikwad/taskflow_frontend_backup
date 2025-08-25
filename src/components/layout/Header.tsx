@@ -156,6 +156,42 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
     await Promise.all(promises);
   };
 
+  // Clear all notifications handler
+  const clearAllNotifications = async () => {
+    try {
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_ENV == "PRODUCTION"
+            ? import.meta.env.VITE_BACKEND_PROD
+            : import.meta.env.VITE_BACKEND_DEV
+        }/api/v1/notifications/clear`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
+        }
+      );
+
+      if (response.ok && setNotifications) {
+        setNotifications([]);
+        setShowNotifications(false);
+      }
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+    }
+  };
+
+  // Navigate to notifications page
+  const navigateToNotifications = () => {
+    setShowNotifications(false);
+    // You can use your routing system here
+    window.location.href = "/notifications";
+  };
+
+  // Filter notifications to exclude error types for display
+  const displayNotifications = notifications.filter((n) => n.type !== "error");
+
   // Get display name for different user roles
   const getDisplayName = () => {
     if (user?.role === "company") {
@@ -186,23 +222,25 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-40">
+    <header className="bg-white shadow-sm border-b border-gray-200 px-4 sm:px-6 py-5 sticky top-0 z-40">
       <div className="flex items-center justify-between max-w-7xl mx-auto">
-        {/* Search */}
+        
+        {/* Left side - Search */}
         <div className="flex items-center space-x-4 flex-1">
-          <div className="relative max-w-md w-full">
+          {/* <div className="relative max-w-md w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search tasks, users, projects…"
               className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-80 text-sm"
             />
-          </div>
+          </div> */}
         </div>
 
-        {/* Actions, Notifications, User */}
+        {/* Right side - Actions */}
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {/* New Task Button - Hidden for company admin */}
+
+          {/* New Task Button */}
           {(user?.role === "admin" || user?.canAssignTasks) &&
             user?.role !== "super_admin" &&
             user?.role !== "company" && (
@@ -215,7 +253,7 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
               </button>
             )}
 
-          {/* Notification Dropdown */}
+          {/* Notification Button */}
           <div className="relative">
             <button
               ref={bellRef}
@@ -233,86 +271,114 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
                 </span>
               )}
             </button>
+
             {/* Notification Dropdown */}
             {showNotifications && (
               <div
                 ref={notificationDropdownRef}
-                className="absolute z-50 right-0 mt-3 w-80 sm:w-96 bg-white shadow-2xl border border-gray-100 rounded-2xl overflow-hidden backdrop-blur-sm transition"
-                style={{
-                  background: "rgba(255,255,255,0.97)",
-                  boxShadow: "0 8px 32px rgba(50,60,100,0.18)",
-                }}
+                className="absolute z-50 right-0 mt-2 w-80 bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden max-h-96"
               >
-                <div className="flex justify-between items-center border-b border-gray-100 px-5 py-3 bg-white/90 sticky top-0 z-10">
-                  <span className="font-semibold text-gray-800">
-                    Notifications
-                  </span>
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={markAllAsRead}
-                      className="flex items-center text-xs text-blue-600 hover:underline font-medium"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1" /> Mark all as read
-                    </button>
-                  )}
-                </div>
-                <ul className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <li className="py-8 px-6 text-center text-gray-400">
-                      No notifications
-                    </li>
-                  ) : (
-                    notifications
-                      .filter((n) => n.type !== "error")
-                      .map((n, idx) => (
-                        <li
-                          key={n.id || idx}
-                          className={`px-6 py-3 cursor-pointer transition group ${
-                            !n.isRead
-                              ? "bg-blue-50/80 hover:bg-blue-100 shadow-sm"
-                              : "hover:bg-gray-50"
-                          }`}
-                          title={
-                            n.createdAt
-                              ? new Date(n.createdAt).toLocaleString()
-                              : undefined
-                          }
-                          onClick={() =>
-                            markNotificationAsRead &&
-                            !n.isRead &&
-                            markNotificationAsRead(n.id)
-                          }
+                {/* Notification Header */}
+                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Notifications
+                    </h3>
+                    <div className="flex items-center space-x-3">
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllAsRead}
+                          className="text-xs text-blue-600 hover:text-blue-700"
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div
-                                className="text-gray-800 leading-tight truncate"
-                                style={!n.isRead ? { fontWeight: 600 } : {}}
-                              >
-                                {n.message}
-                              </div>
-                              {n.createdAt && (
-                                <div className="text-xs text-gray-400 mt-1">
-                                  {new Date(n.createdAt).toLocaleTimeString(
-                                    [],
-                                    { hour: "2-digit", minute: "2-digit" }
-                                  )}
-                                </div>
+                          Mark all read
+                        </button>
+                      )}
+                      {/* {displayNotifications.length > 0 && (
+                        <button
+                          onClick={clearAllNotifications}
+                          className="text-xs text-red-600 hover:text-red-700"
+                        >
+                          Clear all
+                        </button>
+                      )} */}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notification List */}
+                <div className="max-h-64 overflow-y-auto">
+                  {displayNotifications.length === 0 ? (
+                    <div className="px-4 py-6 text-center">
+                      <Bell className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No notifications</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {displayNotifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className={`px-4 py-3 hover:bg-gray-50 cursor-pointer ${
+                            !notification.isRead ? "bg-blue-50" : ""
+                          }`}
+                          onClick={() => {
+                            if (!notification.isRead && markNotificationAsRead) {
+                              markNotificationAsRead(notification.id);
+                            }
+                          }}
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div className="flex-shrink-0">
+                              {notification.type === "success" ? (
+                                <CheckCircle className="w-5 h-5 text-green-500" />
+                              ) : (
+                                <Bell className="w-5 h-5 text-blue-500" />
                               )}
                             </div>
-                            {!n.isRead && (
-                              <span className="ml-2 mt-1 flex-shrink-0 inline-block bg-blue-500 w-2.5 h-2.5 rounded-full animate-pulse"></span>
-                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  {notification.title && (
+                                    <p className="text-sm font-medium text-gray-900 mb-1">
+                                      {notification.title}
+                                    </p>
+                                  )}
+                                  <p className="text-sm text-gray-600">
+                                    {notification.message}
+                                  </p>
+                                  {notification.createdAt && (
+                                    <p className="text-xs text-gray-400 mt-1">
+                                      {new Date(notification.createdAt).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
+                                {!notification.isRead && (
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full ml-2 mt-2"></div>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </li>
-                      ))
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </ul>
+                </div>
+
+                {/* Footer */}
+                {displayNotifications.length > 0 && (
+                  <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
+                    <button
+                      onClick={navigateToNotifications}
+                      className="text-xs text-gray-600 hover:text-gray-700"
+                    >
+                      View all notifications
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Profile Dropdown */}
+          {/* Profile Button */}
           <div className="relative">
             <button
               ref={profileRef}
@@ -358,7 +424,7 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
                 }}
               >
                 {/* Profile Header */}
-                <div className="px-4 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-purple-50">
+                <div className="bg-white shadow-sm border-b border-gray-200 px-4 sm:px-6 py-5 sticky top-0 z-40">
                   <div className="flex items-center space-x-3">
                     <img
                       src={
@@ -386,12 +452,11 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
                   </div>
                 </div>
 
-                {/* Profile Menu Items */}
+                {/* Profile Menu */}
                 <div className="py-2">
                   <button
                     onClick={() => {
                       setShowProfile(false);
-                      // Navigate to profile/settings page
                       window.location.href = "/settings";
                     }}
                     className="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"

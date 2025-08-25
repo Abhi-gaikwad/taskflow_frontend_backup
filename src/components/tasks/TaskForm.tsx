@@ -1,7 +1,7 @@
 // src/components/tasks/TaskForm.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, User, Tag, AlertCircle, Users, Check, X } from 'lucide-react';
+import { Calendar, User, Tag, AlertCircle, Users, Check, X, Search } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../common/Button';
@@ -64,6 +64,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const [isLoading, setIsLoading] = useState(false);
   const [showUserList, setShowUserList] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     async function fetchUsers() {
@@ -324,90 +325,98 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  e.preventDefault();
+  setIsLoading(true);
 
-    console.log('[TaskForm] Form submission started');
+  console.log('[TaskForm] Form submission started');
 
-    if (!formData.title.trim()) {
-      setToastMessage('Task title is required');
+  if (!formData.title.trim()) {
+    setToastMessage('Task title is required');
+    setToastType('error');
+    setShowToast(true);
+    setIsLoading(false);
+    return;
+  }
+
+  if (selectedUsers.size === 0) {
+    setToastMessage('Please select at least one user to assign the task to');
+    setToastType('error');
+    setShowToast(true);
+    setIsLoading(false);
+    return;
+  }
+
+  if (!formData.dueDate) {
+    setToastMessage('Due date is required');
+    setToastType('error');
+    setShowToast(true);
+    setIsLoading(false);
+    return;
+  }
+
+  try {
+    const userIds = Array.from(selectedUsers);
+    console.log('[TaskForm] Creating tasks for users:', userIds);
+    
+    const results = await createTasksForUsers(userIds);
+
+    console.log('[TaskForm] Task creation results:', results);
+
+    const taskTitle = formData.title; // Store before reset
+
+    // Reset form
+    setFormData({
+      title: '',
+      description: '',
+      priority: 'medium' as Task['priority'],
+      dueDate: '',
+      reminderSet: '',
+      tags: '',
+    });
+    setSelectedUsers(new Set());
+    setGroupSelections({
+      allAdmins: false,
+      allUsers: false,
+      everyone: false
+    });
+
+    // ✅ Show success/failure alerts in addition to toast
+    if (results.failed.length === 0) {
+      setToastMessage(`Task "${taskTitle}" successfully assigned to ${results.successful.length} user! Notifications sent to all parties.`);
+      setToastType('success');
+      window.alert(`✅ Task "${taskTitle}" assigned successfully to ${results.successful.length} user!`);
+    } else if (results.successful.length === 0) {
+      setToastMessage(`Failed to assign task to any users. Please try again.`);
       setToastType('error');
-      setShowToast(true);
-      setIsLoading(false);
-      return;
+      window.alert(`❌ Failed to assign task. Please try again.`);
+    } else {
+      setToastMessage(`Task assigned to ${results.successful.length} user(s). ${results.failed.length} assignment(s) failed. Notifications sent for successful assignments.`);
+      setToastType('success');
+      window.alert(`⚠️ Task assigned to ${results.successful.length} user(s), but ${results.failed.length} failed.`);
     }
 
-    if (selectedUsers.size === 0) {
-      setToastMessage('Please select at least one user to assign the task to');
-      setToastType('error');
-      setShowToast(true);
-      setIsLoading(false);
-      return;
+    setShowToast(true);
+
+    if (results.successful.length > 0) {
+      onSubmit();
+      setTimeout(() => {
+        onClose();
+      }, 2000);
     }
 
-    if (!formData.dueDate) {
-      setToastMessage('Due date is required');
-      setToastType('error');
-      setShowToast(true);
-      setIsLoading(false);
-      return;
-    }
+  } catch (error: any) {
+    console.error('[TaskForm] Task creation error:', error);
+    setToastMessage('Error creating tasks: ' + (error.message || 'Unknown error'));
+    setToastType('error');
+    setShowToast(true);
 
-    try {
-      const userIds = Array.from(selectedUsers);
-      console.log('[TaskForm] Creating tasks for users:', userIds);
-      
-      const results = await createTasksForUsers(userIds);
+    // ❌ Error alert
+    window.alert(`❌ Error creating tasks: ${error.message || 'Unknown error'}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-      console.log('[TaskForm] Task creation results:', results);
-
-      setFormData({
-        title: '',
-        description: '',
-        priority: 'medium' as Task['priority'],
-        dueDate: '',
-        reminderSet: '',
-        tags: '',
-      });
-      setSelectedUsers(new Set());
-      setGroupSelections({
-        allAdmins: false,
-        allUsers: false,
-        everyone: false
-      });
-
-      // Show success/failure message with enhanced feedback
-      if (results.failed.length === 0) {
-        const taskTitle = formData.title; // Store before form is reset
-        setToastMessage(`Task "${taskTitle}" successfully assigned to ${results.successful.length} user(s)! Notifications sent to all parties.`);
-        setToastType('success');
-      } else if (results.successful.length === 0) {
-        setToastMessage(`Failed to assign task to any users. Please try again.`);
-        setToastType('error');
-      } else {
-        setToastMessage(`Task assigned to ${results.successful.length} user(s). ${results.failed.length} assignment(s) failed. Notifications sent for successful assignments.`);
-        setToastType('success');
-      }
-
-      setShowToast(true);
-
-      // Call the onSubmit prop to trigger the parent to re-fetch tasks
-      if (results.successful.length > 0) {
-        onSubmit();
-        setTimeout(() => {
-          onClose();
-        }, 2000);
-      }
-
-    } catch (error: any) {
-      console.error('[TaskForm] Task creation error:', error);
-      setToastMessage('Error creating tasks: ' + (error.message || 'Unknown error'));
-      setToastType('error');
-      setShowToast(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const getUserDisplayName = (user: UserData) => {
     return user.full_name || user.username || user.email || 'Unknown User';
@@ -415,9 +424,21 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
 
   const getSelectedCount = () => selectedUsers.size;
 
+  // Filter users based on search term
+  const filterUsers = (users: UserData[]) => {
+    if (!searchTerm.trim()) return users;
+    
+    const searchLower = searchTerm.toLowerCase();
+    return users.filter(user => 
+      getUserDisplayName(user).toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower) ||
+      user.username.toLowerCase().includes(searchLower)
+    );
+  };
+
   if (authLoading) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="px-4 py-8 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading permissions...</p>
@@ -428,7 +449,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
 
   if (!isAuthenticated || !currentUser) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="px-4 py-8 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-600 text-center">
           <AlertCircle className="w-8 h-8 mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
@@ -443,7 +464,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
 
   if (!canAssignTasks()) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="px-4 py-8 bg-red-50 border border-red-200 rounded-lg text-red-600 text-center">
           <AlertCircle className="w-8 h-8 mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">Permission Denied</h3>
@@ -471,43 +492,27 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Task Title *
-          </label>
-          <input
-            type="text"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-              formData.title.trim()
-                ? 'border-gray-300 focus:ring-blue-500'
-                : 'border-red-300 focus:ring-red-500'
-            }`}
-            placeholder="Enter task title"
-            required
-            disabled={isLoading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Description
-          </label>
-          <textarea
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            rows={3}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter task description"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
+        
+        {/* Row 1: Title and Priority */}
+        <div className="grid grid-cols-12 gap-4">
+          <div className="col-span-8">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Task Title *
+            </label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 
+                         border-gray-300 focus:ring-blue-500"
+              placeholder="Enter task title"
+              required
+              disabled={isLoading}
+            />
+          </div>
+          <div className="col-span-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <AlertCircle className="w-4 h-4 inline mr-1" />
               Priority
@@ -524,8 +529,27 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
               <option value="urgent">Urgent</option>
             </select>
           </div>
+        </div>
 
-          <div>
+        {/* Row 2: Description */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            rows={3}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg 
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter task description"
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* Row 3: Due Date and Tags */}
+        <div className="grid grid-cols-12 gap-4">
+          <div className="col-span-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <Calendar className="w-4 h-4 inline mr-1" />
               Due Date *
@@ -539,8 +563,23 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
               disabled={isLoading}
             />
           </div>
+          <div className="col-span-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Tag className="w-4 h-4 inline mr-1" />
+              Tags (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={formData.tags}
+              onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g. design, urgent, frontend"
+              disabled={isLoading}
+            />
+          </div>
         </div>
 
+        {/* Row 4: User Assignment */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <label className="block text-sm font-medium text-gray-700">
@@ -570,6 +609,31 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
             </div>
           ) : showUserList ? (
             <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
+              {/* Search Bar */}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search users by name or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isLoading}
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      disabled={isLoading}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="mb-4">
                 <div className="flex space-x-4">
                   <label className="flex items-center">
@@ -612,7 +676,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
                       <div>
                         <div className="font-medium">Everyone</div>
                         <div className="text-xs text-gray-500">
-                          {userGroups.all.length} users
+                          {filterUsers(userGroups.all).length} users {searchTerm && `(filtered from ${userGroups.all.length})`}
                         </div>
                       </div>
                     </label>
@@ -628,7 +692,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
                       <div>
                         <div className="font-medium">All Admins</div>
                         <div className="text-xs text-gray-500">
-                          {userGroups.admins.length} admins
+                          {filterUsers(userGroups.admins).length} admins {searchTerm && `(filtered from ${userGroups.admins.length})`}
                         </div>
                       </div>
                     </label>
@@ -644,7 +708,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
                       <div>
                         <div className="font-medium">All Users</div>
                         <div className="text-xs text-gray-500">
-                          {userGroups.users.length} users
+                          {filterUsers(userGroups.users).length} users {searchTerm && `(filtered from ${userGroups.users.length})`}
                         </div>
                       </div>
                     </label>
@@ -655,13 +719,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Individual Users:</h4>
                 
-                {userGroups.admins.length > 0 && (
+                {filterUsers(userGroups.admins).length > 0 && (
                   <div className="mb-4">
                     <h5 className="text-xs font-medium text-gray-600 mb-2 uppercase tracking-wide">
-                      Admins ({userGroups.admins.length})
+                      Admins ({filterUsers(userGroups.admins).length}{searchTerm && ` of ${userGroups.admins.length}`})
                     </h5>
                     <div className="grid grid-cols-2 gap-2">
-                      {userGroups.admins.map((user) => (
+                      {filterUsers(userGroups.admins).map((user) => (
                         <label
                           key={user.id}
                           className="flex items-center p-2 border rounded hover:bg-white cursor-pointer"
@@ -687,13 +751,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
                   </div>
                 )}
 
-                {userGroups.users.length > 0 && (
+                {filterUsers(userGroups.users).length > 0 && (
                   <div>
                     <h5 className="text-xs font-medium text-gray-600 mb-2 uppercase tracking-wide">
-                      Users ({userGroups.users.length})
+                      Users ({filterUsers(userGroups.users).length}{searchTerm && ` of ${userGroups.users.length}`})
                     </h5>
                     <div className="grid grid-cols-2 gap-2">
-                      {userGroups.users.map((user) => (
+                      {filterUsers(userGroups.users).map((user) => (
                         <label
                           key={user.id}
                           className="flex items-center p-2 border rounded hover:bg-white cursor-pointer"
@@ -719,7 +783,21 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
                   </div>
                 )}
 
-                {userGroups.all.length === 0 && (
+                {filterUsers(userGroups.all).length === 0 && searchTerm && (
+                  <div className="text-center py-4 text-gray-500">
+                    <Search className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <p>No users found matching "{searchTerm}"</p>
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="mt-2 text-blue-500 hover:text-blue-600 text-sm underline"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                )}
+
+                {userGroups.all.length === 0 && !searchTerm && (
                   <div className="text-center py-4 text-gray-500">
                     No users available for assignment in your company
                   </div>
@@ -736,21 +814,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
           )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <Tag className="w-4 h-4 inline mr-1" />
-            Tags (comma-separated)
-          </label>
-          <input
-            type="text"
-            value={formData.tags}
-            onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g. design, urgent, frontend"
-            disabled={isLoading}
-          />
-        </div>
-
+        {/* Row 5: Action Buttons */}
         <div className="flex justify-end space-x-3 pt-4">
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
             Cancel
@@ -762,6 +826,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
             {isLoading ? 'Creating Tasks...' : `Create Task${selectedUsers.size > 1 ? 's' : ''} (${selectedUsers.size})`}
           </Button>
         </div>
+
       </form>
 
       {showToast && (
