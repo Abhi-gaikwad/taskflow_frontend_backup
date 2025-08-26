@@ -4,16 +4,16 @@ import { authAPI } from '../services/api';
 import { transformBackendUser } from '../utils/transform';
 import { handleApiError } from '../services/api';
 
-// This UserResponse interface is taken from the first snippet and is a good representation of what the backend returns.
+// Backend user response interface
 interface UserResponse {
   id: number;
-  email: string;
+  mobile_no?: string;
+  phone_number?: string;
   username: string;
   is_active: boolean;
   role: 'super_admin' | 'admin' | 'user' | 'company';
   created_at: string;
   full_name?: string;
-  phone_number?: string;
   department?: string;
   company_id?: number;
   company?: {
@@ -34,11 +34,10 @@ interface AuthState {
   token: string | null;
 }
 
-// Enhanced context types with new smart login method
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  companyLogin: (companyUsername: string, companyPassword: string) => Promise<{ success: boolean; error?: string }>;
-  smartLogin: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (mobile: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  companyLogin: (mobile: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  smartLogin: (mobile: string, password: string, otp: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   logout: () => void;
   updateUser: (user: User) => void;
   refreshUser: () => Promise<void>;
@@ -62,7 +61,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Role-based permissions and route access from the first snippet
+// Role-based permissions and route access
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   super_admin: ['manage_companies', 'manage_all_users', 'view_dashboard', 'view_assignable_users'],
   admin: ['manage_company_users', 'manage_company_tasks', 'view_dashboard', 'view_assignable_users'],
@@ -121,7 +120,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               isAuthenticated: true, 
               token 
             }));
-            // Immediately attempt to refresh the user to validate the token
             await refreshUser(); 
           } catch (error) {
             console.error('[AuthContext] Error parsing saved auth data:', error);
@@ -130,7 +128,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setAuthState({ user: null, isAuthenticated: false, isLoading: false, token: null });
           }
         } else {
-          // Token exists but no auth data, refresh from backend
           await refreshUser();
         }
       } else {
@@ -143,16 +140,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const commonLoginLogic = useCallback((accessToken: string, userData: UserResponse) => {
     const user = transformBackendUser(userData);
     localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('auth', JSON.stringify({ ...userData, user })); // Store full user data
+    localStorage.setItem('auth', JSON.stringify({ ...userData, user }));
     setAuthState({ user, isAuthenticated: true, isLoading: false, token: accessToken });
   }, []);
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  // Updated login function for mobile-based authentication
+  const login = async (mobile: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
     try {
-      const response = await authAPI.login(email, password);
+      const response = await authAPI.login(mobile, password);
       commonLoginLogic(response.access_token, response.user);
-      await refreshUser(); // Ensure latest user data and permissions
+      await refreshUser();
       return { success: true };
     } catch (error: any) {
       const errorMessage = handleApiError(error);
@@ -161,18 +159,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Updated company login function for mobile-based authentication
   const companyLogin = async (
-    companyUsername: string,
-    companyPassword: string
+    mobile: string,
+    password: string
   ): Promise<{ success: boolean; error?: string }> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
     try {
-      const response = await authAPI.companyLogin(companyUsername, companyPassword);
+      const response = await authAPI.companyLogin(mobile, password);
       if (!response.access_token || !response.user) {
         throw new Error('Invalid response from server - missing token or user data');
       }
       commonLoginLogic(response.access_token, response.user);
-      await refreshUser(); // Ensure latest user data and permissions
+      await refreshUser();
       return { success: true };
     } catch (error: any) {
       const errorMessage = handleApiError(error);
@@ -181,53 +180,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // NEW: Smart login that automatically tries both user and company authentication
-  const smartLogin = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  // New smart login function that handles mobile + password/OTP
+  const smartLogin = async (mobile: string, password: string, otp: string): Promise<{ success: boolean; error?: string; message?: string }> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
     
-    console.log('[AUTH] Smart login attempt for:', username);
+    console.log('[AUTH] Smart login attempt for mobile:', mobile);
     
-    // First try unified login (handles users including SuperAdmin)
     try {
-      console.log('[AUTH] Trying unified user login...');
-      const response = await authAPI.login(username, password);
-      console.log('[AUTH] Unified login successful, user role:', response.user?.role);
+      const response = await authAPI.smartLogin(mobile, password, otp);
       
-      commonLoginLogic(response.access_token, response.user);
-      await refreshUser();
-      return { success: true };
-    } catch (userError: any) {
-      console.log('[AUTH] Unified login failed, trying company login...', handleApiError(userError));
+      // Check if this is an OTP response
+      if (response.message && !response.access_token) {
+        console.log('[AUTH] OTP sent to mobile');
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return { success: false, message: response.message };
+      }
       
-      // If unified login fails, try company-specific login
-      try {
-        const response = await authAPI.companyLogin(username, password);
-        if (!response.access_token || !response.user) {
-          throw new Error('Invalid response from server - missing token or user data');
-        }
-        console.log('[AUTH] Company login successful');
-        
+      // This is a successful login response
+      if (response.access_token && response.user) {
+        console.log('[AUTH] Smart login successful, user role:', response.user?.role);
         commonLoginLogic(response.access_token, response.user);
         await refreshUser();
         return { success: true };
-      } catch (companyError: any) {
-        console.log('[AUTH] Both login attempts failed');
-        
-        // Return the most relevant error message
-        const userErrorMessage = handleApiError(userError);
-        const companyErrorMessage = handleApiError(companyError);
-        
-        // If user error suggests wrong credentials, use that. Otherwise, use a generic message.
-        const finalError = userErrorMessage.toLowerCase().includes('incorrect') || 
-                          userErrorMessage.toLowerCase().includes('password') ||
-                          userErrorMessage.toLowerCase().includes('username') ||
-                          userErrorMessage.toLowerCase().includes('email')
-                          ? userErrorMessage 
-                          : 'Invalid username/email or password';
-        
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, error: finalError };
       }
+      
+      throw new Error('Invalid response from server');
+      
+    } catch (error: any) {
+      console.log('[AUTH] Smart login failed:', handleApiError(error));
+      
+      const errorMessage = handleApiError(error);
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return { success: false, error: errorMessage };
     }
   };
 
@@ -243,7 +227,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAuthState(prev => ({ ...prev, user }));
   }, []);
 
-  // hasPermission logic is combined from both snippets, prioritizing the more detailed switch-case approach
   const hasPermission = useCallback((permission: string): boolean => {
     if (!authState.user) return false;
     
@@ -252,42 +235,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     switch (permission) {
       case 'view_assignable_users':
       case 'assign_tasks':
-        // Super Admin, Company, and Admin can assign tasks.
-        // Regular users can if they have the can_assign_tasks flag.
         if (['super_admin', 'company', 'admin'].includes(user.role)) return true;
         if (user.role === 'user' && user.can_assign_tasks) return true;
         return false;
 
       case 'manage_users':
-        // Super Admin, Company, and Admin can manage users.
         return ['super_admin', 'company', 'admin'].includes(user.role);
 
       case 'manage_companies':
         return user.role === 'super_admin';
 
       case 'view_all_tasks':
-        // Super Admin, Company, and Admin can view tasks within their scope
         return ['super_admin', 'company', 'admin'].includes(user.role);
 
       case 'manage_tasks':
-        // Super Admin, Company, and Admin can manage tasks in their company.
-        // Regular users can manage their own tasks.
         return ['super_admin', 'company', 'admin', 'user'].includes(user.role);
 
       case 'update_task_status':
-        // All authenticated users can update the status of their assigned tasks.
         return true;
 
       case 'create_admin_users':
-        // Super Admin and Company can create admin users.
         return ['super_admin', 'company'].includes(user.role);
 
       case 'view_company_data':
-        // Super Admin, Company, and Admin can view company data.
         return ['super_admin', 'company', 'admin'].includes(user.role);
 
       default:
-        // Use the ROLE_PERMISSIONS map as a fallback for other permissions
         const userPermissions = ROLE_PERMISSIONS[user.role] || [];
         return userPermissions.includes(permission);
     }
@@ -317,7 +290,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     ...authState,
     login,
     companyLogin,
-    smartLogin, // NEW: Added smart login method
+    smartLogin,
     logout,
     updateUser,
     refreshUser,

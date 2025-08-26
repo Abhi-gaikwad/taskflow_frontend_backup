@@ -72,26 +72,23 @@ api.interceptors.response.use(
 );
 
 // Auth API
+// Auth API - Updated for mobile-based authentication
 export const authAPI = {
   /**
-   * Regular user login (includes static superadmin)
-   * For SuperAdmin access, use:
-   * - Email: superadmin@test.com
-   * - Password: 123
+   * Regular user login with mobile number and password
    */
-  login: async (email: string, password: string) => {
-    console.log("[API] Regular login attempt for:", email);
-
-    // Log if this is a superadmin login attempt
+  login: async (mobile: string, password: string) => {
+    console.log("[API] Regular login attempt for mobile:", mobile);
 
     try {
-      const formData = new FormData();
-      formData.append("username", email);
-      formData.append("password", password);
+      const payload = {
+        mobile: mobile,
+        password: password
+      };
 
-      const response = await api.post("/login", formData, {
+      const response = await api.post("/login", payload, {
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
         },
       });
 
@@ -106,26 +103,28 @@ export const authAPI = {
     } catch (error: any) {
       console.error(
         "[API] Regular login failed for:",
-        email,
+        mobile,
         error.response?.data || error.message
       );
       throw error;
     }
   },
 
-  companyLogin: async (company_username: string, company_password: string) => {
-    console.log("[API] Company login attempt for:", company_username);
+  /**
+   * Company login with mobile number and password
+   */
+  companyLogin: async (mobile: string, password: string) => {
+    console.log("[API] Company login attempt for mobile:", mobile);
 
     try {
-      const formData = new FormData();
-      formData.append("username", company_username);
-      formData.append("password", company_password);
+      const payload = {
+        mobile: mobile,
+        password: password
+      };
 
-      console.log("[API] Company login FormData prepared");
-
-      const response = await api.post("/company-login", formData, {
+      const response = await api.post("/login", payload, {
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
         },
       });
 
@@ -146,7 +145,7 @@ export const authAPI = {
         throw new Error("Invalid response: missing user data");
       }
 
-      console.log("[API] Company login successful for:", company_username, {
+      console.log("[API] Company login successful for mobile:", mobile, {
         hasToken: !!response.data.access_token,
         hasUser: !!response.data.user,
         userId: response.data.user?.id,
@@ -155,7 +154,7 @@ export const authAPI = {
 
       return response.data;
     } catch (error: any) {
-      console.error("[API] Company login failed for:", company_username, {
+      console.error("[API] Company login failed for mobile:", mobile, {
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
@@ -167,13 +166,74 @@ export const authAPI = {
     }
   },
 
+  /**
+   * Smart login that handles mobile + password or OTP
+   * If no password provided, sends OTP
+   * If OTP provided, verifies OTP
+   */
+  smartLogin: async (mobile: string, password: string, otp: string) => {
+    console.log("[API] Smart login attempt for mobile:", mobile, {
+      hasPassword: !!password,
+      hasOtp: !!otp
+    });
+
+    try {
+      const payload: any = {
+        mobile: mobile
+      };
+
+      // Add password or OTP based on what's provided
+      if (otp) {
+        payload.otp = otp;
+      } else if (password) {
+        payload.password = password;
+      }
+      // If neither password nor OTP is provided, backend will send OTP
+
+      const response = await api.post("/login", payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      // Check if this is an OTP response (no access_token)
+      if (response.data.message && !response.data.access_token) {
+        console.log("[API] OTP sent response:", response.data);
+        return response.data; // Return OTP response
+      }
+
+      // Validate login response structure
+      if (!response.data.access_token || !response.data.user) {
+        throw new Error(
+          "Invalid login response structure: missing access_token or user"
+        );
+      }
+
+      console.log("[API] Smart login successful for mobile:", mobile, {
+        hasToken: !!response.data.access_token,
+        hasUser: !!response.data.user,
+        userId: response.data.user?.id,
+        userRole: response.data.user?.role,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error(
+        "[API] Smart login failed for mobile:",
+        mobile,
+        error.response?.data || error.message
+      );
+      throw error;
+    }
+  },
+
   getCurrentUser: async () => {
     console.log("[API] Getting current user");
     try {
       const response = await api.get("/users/me");
       console.log("[API] Current user retrieved successfully:", {
         id: response.data?.id,
-        email: response.data?.email,
+        mobile: response.data?.phone_number,
         role: response.data?.role,
         isStaticSuperAdmin: response.data?.id === -999,
       });
@@ -186,10 +246,6 @@ export const authAPI = {
       throw error;
     }
   },
-
-  /**
-   * Helper function to check if current user is the static superadmin
-   */
 };
 
 // Users API
