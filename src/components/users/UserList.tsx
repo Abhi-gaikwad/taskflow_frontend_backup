@@ -1,6 +1,6 @@
 // UserList.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, UserPlus, Shield, User, Edit, Trash2, UserCheck, UserX, RefreshCw, Building, Mail } from 'lucide-react';
+import { Search, UserPlus, Shield, User, Edit, Trash2, UserCheck, UserX, RefreshCw, Building } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { transformBackendUser } from '../../utils/transform';
 import { Button } from '../common/Button';
@@ -59,10 +59,9 @@ export const UserList: React.FC = () => {
     if (!searchTerm) return allUsers;
     return allUsers.filter(u => {
       const lowerSearchTerm = searchTerm.toLowerCase();
-      const nameMatch = u.name.toLowerCase().includes(lowerSearchTerm);
-      const emailMatch = u.email.toLowerCase().includes(lowerSearchTerm);
-      const companyMatch = isSuperAdmin && u.company?.name.toLowerCase().includes(lowerSearchTerm);
-      return nameMatch || emailMatch || !!companyMatch;
+      const fullNameMatch = u.full_name?.toLowerCase().includes(lowerSearchTerm);
+      const usernameMatch = u.username?.toLowerCase().includes(lowerSearchTerm);
+      return fullNameMatch || usernameMatch;
     });
   }, [allUsers, searchTerm, isSuperAdmin]);
 
@@ -228,7 +227,7 @@ export const UserList: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder={isSuperAdmin ? "Search by admin name, email, or company..." : "Search users..."}
+              placeholder={isSuperAdmin ? "Search by admin name, username, or company..." : "Search by name or username..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -259,15 +258,14 @@ export const UserList: React.FC = () => {
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-3">
                       <img 
-                        src={u.avatar || `https://i.pravatar.cc/40?u=${u.email}`} 
-                        alt={u.name} 
+                        src={u.avatar || `https://i.pravatar.cc/40?u=${u.full_name || u.username}`} 
+                        alt={u.full_name || u.username} 
                         className="w-10 h-10 rounded-full object-cover"
                       />
                       <div>
-                        <p className="font-medium text-gray-900">{u.name}</p>
+                        <p className="font-medium text-gray-900">{u.full_name}</p>
                         <div className="flex items-center space-x-1 mt-1">
-                          <Mail className="w-3 h-3 text-gray-400" />
-                          <span className="text-sm text-gray-500">{u.email}</span>
+                          <span className="text-sm text-gray-500">@{u.username}</span>
                         </div>
                       </div>
                     </div>

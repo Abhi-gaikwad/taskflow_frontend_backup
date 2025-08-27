@@ -49,9 +49,29 @@ export const LoginForm: React.FC = () => {
       }
 
       if (result && result.success) {
-        navigate('/dashboard');
+        const savedAuth = localStorage.getItem("auth");
+        let role = null;
+
+        if (savedAuth) {
+          try {
+            const parsed = JSON.parse(savedAuth);
+            // Try nested user object first, fallback to root
+            role = parsed?.user?.role || parsed?.role || null;
+          } catch (e) {
+            console.error("Error parsing auth:", e);
+          }
+        }
+
+        console.log("🔑 Detected role after login:", role);
+
+        if (role === "company") {
+          navigate("/company-dashboard");
+        } else {
+          navigate("/dashboard");
+        }
         return;
       }
+
 
       setError(result?.error || 'Login failed. Please check your credentials.');
 

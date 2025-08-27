@@ -395,11 +395,13 @@ export const companyAPI = {
     description?: string;
     company_username: string;
     company_password: string;
+    phone_number: string;
   }) => {
     console.log("[API] Creating company with data:", {
       name: data.name,
       description: data.description,
       company_username: data.company_username,
+      phone_number: data.phone_number,
       hasPassword: !!data.company_password,
     });
 

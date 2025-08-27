@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import {
-  Mail,
   User as UserIcon,
   Shield,
   KeyRound,
@@ -52,9 +51,9 @@ export const UserForm: React.FC<UserFormProps> = ({
       : user?.company_id?.toString() || "";
 
   const [formData, setFormData] = useState({
-    email: user?.email || "",
+    fullName: user?.full_name || "",
     username: user?.username || "",
-    mobile: (user as any)?.mobile || "",
+    phoneNumber: user?.phone_number || "",
     password: "",
     confirmPassword: "",
     role:
@@ -62,7 +61,8 @@ export const UserForm: React.FC<UserFormProps> = ({
         ? "user"
         : user?.role || "user",
     companyId: defaultCompanyId,
-    isActive: (user as any)?.isActive ?? true,
+    // Fix: Check both isActive and is_active properties
+    isActive: user?.isActive ?? user?.is_active ?? true,
     canAssignTasks: user?.can_assign_tasks ?? false,
   });
 
@@ -101,20 +101,21 @@ export const UserForm: React.FC<UserFormProps> = ({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      newErrors.email = "Please enter a valid email address";
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = "Full name is required";
+    }
 
-    if (!formData.username.trim()) newErrors.username = "Username is required";
-    else if (formData.username.length < 3)
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required";
+    } else if (formData.username.length < 3) {
       newErrors.username = "Username must be at least 3 characters";
+    }
 
-    // Mobile number validation
-    if (
-      formData.mobile &&
-      !/^\+?[\d\s\-()]{10,15}$/.test(formData.mobile.replace(/\s/g, ""))
-    )
-      newErrors.mobile = "Please enter a valid mobile number";
+    if (!formData.phoneNumber.trim()) {
+      newErrors.phoneNumber = "Phone number is required";
+    } else if (!/^\d{10,15}$/.test(formData.phoneNumber.trim())) {
+      newErrors.phoneNumber = "Enter a valid phone number";
+    }
 
     if (mode === "create" && !formData.password)
       newErrors.password = "Password is required";
@@ -145,22 +146,25 @@ export const UserForm: React.FC<UserFormProps> = ({
 
     try {
       const userData: any = {
-        email: formData.email,
+        full_name: formData.fullName,
         username: formData.username,
-        mobile_no: formData.mobile,
+        phone_number: formData.phoneNumber,
         ...(formData.password && { password: formData.password }),
-        is_active: formData.isActive,
+        is_active: formData.isActive, // Use is_active for backend
+        company_id: Number(formData.companyId),
+        role: formData.role,
+        can_assign_tasks: formData.canAssignTasks,
       };
 
       const storedAuth = localStorage.getItem("auth");
-      const user = storedAuth ? JSON.parse(storedAuth) : null;
-      const companyId = user.id;
+      const authUser = storedAuth ? JSON.parse(storedAuth) : null;
+      const companyId = authUser?.id;
       console.log("hiiii");
       userData.company_id = Number(companyId);
       userData.role = formData.role;
       userData.can_assign_tasks = formData.canAssignTasks;
 
-      console.log(userData, user);
+      console.log(userData, authUser);
 
       if (currentUser?.role === "company") {
         console.log("hiiii");
@@ -246,27 +250,25 @@ export const UserForm: React.FC<UserFormProps> = ({
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Email */}
+            {/* Full Name */}
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-3">
-                <Mail className="w-4 h-4 mr-2 text-gray-500" />
-                Email Address *
+                <UserIcon className="w-4 h-4 mr-2 text-gray-500" />
+                Full Name *
               </label>
               <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.email
-                    ? "border-red-300 bg-red-50"
-                    : "border-gray-300 hover:border-gray-400"
+                type="text"
+                value={formData.fullName}
+                onChange={(e) => handleChange("fullName", e.target.value)}
+                className={`w-full px-4 py-3 border rounded-lg ${
+                  errors.fullName ? "border-red-300 bg-red-50" : "border-gray-300"
                 }`}
-                placeholder="Enter email address"
+                placeholder="Enter full name"
                 disabled={loading}
               />
-              {errors.email && (
+              {errors.fullName && (
                 <p className="text-red-600 text-sm mt-2 font-medium">
-                  {errors.email}
+                  {errors.fullName}
                 </p>
               )}
             </div>
@@ -281,10 +283,8 @@ export const UserForm: React.FC<UserFormProps> = ({
                 type="text"
                 value={formData.username}
                 onChange={(e) => handleChange("username", e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.username
-                    ? "border-red-300 bg-red-50"
-                    : "border-gray-300 hover:border-gray-400"
+                className={`w-full px-4 py-3 border rounded-lg ${
+                  errors.username ? "border-red-300 bg-red-50" : "border-gray-300"
                 }`}
                 placeholder="Enter username"
                 disabled={loading}
@@ -296,27 +296,25 @@ export const UserForm: React.FC<UserFormProps> = ({
               )}
             </div>
 
-            {/* Mobile Number */}
+            {/* Phone Number */}
             <div className="md:col-span-2">
               <label className="flex items-center text-sm font-medium text-gray-700 mb-3">
                 <Phone className="w-4 h-4 mr-2 text-gray-500" />
-                Mobile Number
+                Phone Number *
               </label>
               <input
                 type="tel"
-                value={formData.mobile}
-                onChange={(e) => handleChange("mobile", e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.mobile
-                    ? "border-red-300 bg-red-50"
-                    : "border-gray-300 hover:border-gray-400"
+                value={formData.phoneNumber}
+                onChange={(e) => handleChange("phoneNumber", e.target.value)}
+                className={`w-full px-4 py-3 border rounded-lg ${
+                  errors.phoneNumber ? "border-red-300 bg-red-50" : "border-gray-300"
                 }`}
-                placeholder="Enter mobile number (e.g., +1-234-567-8900)"
+                placeholder="Enter phone number (e.g., 9322308018)"
                 disabled={loading}
               />
-              {errors.mobile && (
+              {errors.phoneNumber && (
                 <p className="text-red-600 text-sm mt-2 font-medium">
-                  {errors.mobile}
+                  {errors.phoneNumber}
                 </p>
               )}
             </div>
