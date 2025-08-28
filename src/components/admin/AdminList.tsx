@@ -76,9 +76,9 @@ export const AdminList: React.FC<AdminListProps> = ({
       // Fetch users with admin role (if super_admin) or users within own company (if admin)
       let usersData: Admin[] = [];
       if (user.role === 'super_admin') {
-        usersData = await usersAPI.listUsers({ 
-          role: 'admin', // Only fetch actual admins if super admin
-          limit: maxItems || 100 
+        usersData = await usersAPI.getUsers({ 
+        role: 'admin',
+        limit: maxItems || 100  
         });
       } else if (user.role === 'admin' && user.company_id) {
         usersData = await usersAPI.listUsers({

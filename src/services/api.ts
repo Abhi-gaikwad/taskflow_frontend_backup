@@ -258,9 +258,7 @@ export const usersAPI = {
     is_active?: boolean;
   }): Promise<User[]> => {
     try {
-      const response: AxiosResponse<User[]> = await api.get("/users", {
-        params,
-      });
+      const response: AxiosResponse<User[]> = await api.get("/users", { params });
       return response.data;
     } catch (error) {
       throw new Error(handleApiError(error));
@@ -690,20 +688,21 @@ export interface BulkTaskResponse {
 
 export interface User {
   id: number;
-  email: string;
   username: string;
   role: string;
   company_id?: number;
   is_active: boolean;
   created_at: string;
   full_name?: string;
-  phone_number?: string;
+  phone_number: string;
   department?: string;
   can_assign_tasks?: boolean;
   company?: {
     id: number;
     name: string;
     description?: string;
+    phone_number?: string;
+    company_username?: string;
     is_active: boolean;
   };
 }
