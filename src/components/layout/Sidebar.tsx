@@ -127,23 +127,23 @@ export const Sidebar: React.FC = () => {
                   <NavLink
                     to={item.href}
                     onClick={closeMobileMenu}
-                    className={({ isActive }) =>
+                    className={({ is_active }) =>
                       `group w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
-                        isActive
+                        is_active
                           ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md'
                           : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                       }`
                     }
                   >
-                    {({ isActive }) => (
+                    {({ is_active }) => (
                       <>
                         <item.icon 
                           className={`w-5 h-5 mr-3 transition-colors ${
-                            isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'
+                            is_active ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'
                           }`} 
                         />
                         {item.label}
-                        {isActive && (
+                        {is_active && (
                           <div className="ml-auto">
                             <div className="w-2 h-2 bg-white rounded-full"></div>
                           </div>

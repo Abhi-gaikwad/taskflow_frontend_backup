@@ -309,7 +309,7 @@ export const usersAPI = {
       department: string;
       can_assign_tasks: boolean;
       canAssignTasks: boolean; // For frontend compatibility
-      isActive: boolean;
+      is_active: boolean;
       mobile_no?: string; // For frontend compatibility
     }>
   ): Promise<User> => {
@@ -319,9 +319,9 @@ export const usersAPI = {
         backendUpdates.can_assign_tasks = updates.canAssignTasks;
         delete backendUpdates.canAssignTasks;
       }
-      if ("isActive" in updates) {
-        backendUpdates.is_active = updates.isActive;
-        delete backendUpdates.isActive;
+      if ("is_active" in updates) {
+        backendUpdates.is_active = updates.is_active;
+        delete backendUpdates.is_active;
       }
 
       const response: AxiosResponse<User> = await api.put(

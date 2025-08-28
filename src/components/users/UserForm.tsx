@@ -61,8 +61,8 @@ export const UserForm: React.FC<UserFormProps> = ({
         ? "user"
         : user?.role || "user",
     companyId: defaultCompanyId,
-    // Fix: Check both isActive and is_active properties
-    isActive: user?.isActive ?? user?.is_active ?? true,
+    // Change: Use is_active consistently
+    is_active: user?.is_active ?? true,
     canAssignTasks: user?.can_assign_tasks ?? false,
   });
 
@@ -150,7 +150,8 @@ export const UserForm: React.FC<UserFormProps> = ({
         username: formData.username,
         phone_number: formData.phoneNumber,
         ...(formData.password && { password: formData.password }),
-        is_active: formData.isActive, // Use is_active for backend
+        // Change: Use is_active consistently (no change needed here as it's already correct)
+        is_active: formData.is_active,
         company_id: Number(formData.companyId),
         role: formData.role,
         can_assign_tasks: formData.canAssignTasks,
@@ -477,18 +478,18 @@ export const UserForm: React.FC<UserFormProps> = ({
           </div>
 
           <div className="mt-6 space-y-4">
-            {/* Active Status */}
+            {/* Active Status - Change id and field name */}
             <div className="flex items-center p-4 bg-gray-50 rounded-lg">
               <input
                 type="checkbox"
-                id="isActive"
-                checked={formData.isActive}
-                onChange={(e) => handleChange("isActive", e.target.checked)}
+                id="is_active"
+                checked={formData.is_active}
+                onChange={(e) => handleChange("is_active", e.target.checked)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 disabled={loading}
               />
               <label
-                htmlFor="isActive"
+                htmlFor="is_active"
                 className="ml-3 flex items-center text-sm font-medium text-gray-700"
               >
                 User is active

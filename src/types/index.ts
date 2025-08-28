@@ -8,7 +8,7 @@ export interface User {
   avatar?: string;
   canAssignTasks: boolean;
   can_assign_tasks?: boolean; // Keep both for compatibility
-  isActive: boolean;
+  is_active: boolean;
   createdAt: Date;
   lastLogin?: Date;
   company_id?: number;
@@ -58,7 +58,7 @@ export interface Company {
   id: number; // Changed from string to number
   name: string;
   description?: string;
-  isActive: boolean;
+  is_active: boolean;
   createdAt: Date;
   company_username?: string;
 }

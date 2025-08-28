@@ -200,7 +200,7 @@ export const UserList: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Active</p>
               <p className="text-2xl font-bold text-gray-900">
-                {allUsers.filter(user => user.isActive).length}
+                {allUsers.filter(user => user.is_active).length}
               </p>
             </div>
           </div>
@@ -213,7 +213,7 @@ export const UserList: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Inactive</p>
               <p className="text-2xl font-bold text-gray-900">
-                {allUsers.filter(user => !user.isActive).length}
+                {allUsers.filter(user => !user.is_active).length}
               </p>
             </div>
           </div>
@@ -296,9 +296,9 @@ export const UserList: React.FC = () => {
                   
                   <td className="py-4 px-6">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      u.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
-                      {u.isActive ? (
+                      {u.is_active ? (
                         <>
                           <UserCheck className="w-3 h-3 mr-1" />
                           Active
@@ -328,7 +328,7 @@ export const UserList: React.FC = () => {
                         <Edit className="w-4 h-4" />
                       </button>
                       
-                      {u.isActive ? (
+                      {u.is_active ? (
                         <button 
                           onClick={() => handleDeleteUser(u.id)}
                           className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"

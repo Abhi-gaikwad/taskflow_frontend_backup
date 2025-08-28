@@ -10,7 +10,7 @@
 //     username: backendUser.username,
 //     name: backendUser.full_name || backendUser.username,
 //     role: backendUser.role,
-//     isActive: backendUser.is_active,
+//     is_active: backendUser.is_active,
 //     createdAt: new Date(backendUser.created_at),
     
 //     // Handle can_assign_tasks field - ensure it's properly set
@@ -26,7 +26,7 @@
 //       id: backendUser.company.id,
 //       name: backendUser.company.name,
 //       description: backendUser.company.description,
-//       isActive: backendUser.company.is_active,
+//       is_active: backendUser.company.is_active,
 //       createdAt: new Date(backendUser.company.created_at),
 //       company_username: backendUser.company.company_username,
 //     } : undefined,
