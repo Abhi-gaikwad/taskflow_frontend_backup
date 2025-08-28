@@ -197,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
     if (user?.role === "company") {
       return user?.company?.name || "Company User";
     }
-    return user?.name || user?.username || "User";
+    return user?.name || user?.full_name || "User";
   };
 
   // Get role display

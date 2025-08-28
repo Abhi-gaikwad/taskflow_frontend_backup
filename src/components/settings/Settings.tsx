@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { User, Mail, Shield, Bell, Palette, Save } from 'lucide-react';
+import { User, Phone, Shield, Bell, Palette, Save, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../common/Button';
 
 export const Settings: React.FC = () => {
   const { user, updateUser } = useAuth();
   const [formData, setFormData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    avatar: user?.avatar || '',
+    full_name: user?.full_name || '',
+    phone_number: user?.phone_number || '',
     notifications: {
       email: true,
       push: true,
@@ -22,9 +21,8 @@ export const Settings: React.FC = () => {
     if (user) {
       updateUser({
         ...user,
-        name: formData.name,
-        email: formData.email,
-        avatar: formData.avatar,
+        full_name: formData.full_name,
+        phone_number: formData.phone_number,
       });
     }
   };
@@ -78,23 +76,25 @@ export const Settings: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Mail className="w-4 h-4 inline mr-1" />
-                  Email Address
+                  <Phone className="w-4 h-4 inline mr-1" />
+                  Phone Number
                 </label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Role
@@ -104,6 +104,11 @@ export const Settings: React.FC = () => {
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeClass(user?.role || '')}`}>
                     {getRoleDisplay(user?.role || '')}
                   </span>
+                  {user?.can_assign_tasks && (
+                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                      Can Assign Tasks
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -186,7 +191,7 @@ export const Settings: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile Picture</h2>
             <div className="text-center">
               <img
-                src={formData.avatar || `https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=400`}
+                src={user?.avatar_url || `https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=400`}
                 alt="Profile"
                 className="w-24 h-24 rounded-full mx-auto mb-4 object-cover"
               />
@@ -203,19 +208,25 @@ export const Settings: React.FC = () => {
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Member since</span>
                 <span className="text-sm font-medium text-gray-900">
-                  {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                  {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Last login</span>
+                <span className="text-sm text-gray-600">Last updated</span>
                 <span className="text-sm font-medium text-gray-900">
-                  {user?.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
+                  {user?.updated_at ? new Date(user.updated_at).toLocaleDateString() : 'Never'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Role</span>
                 <span className="text-sm font-medium text-gray-900">
                   {getRoleDisplay(user?.role || '')}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Status</span>
+                <span className={`text-sm font-medium ${user?.is_active ? 'text-green-600' : 'text-red-600'}`}>
+                  {user?.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
               {user?.company && (
@@ -226,6 +237,12 @@ export const Settings: React.FC = () => {
                   </span>
                 </div>
               )}
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Phone</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {user?.phone_number || 'Not provided'}
+                </span>
+              </div>
             </div>
           </div>
         </div>

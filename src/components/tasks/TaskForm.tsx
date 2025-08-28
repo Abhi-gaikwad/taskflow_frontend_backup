@@ -263,6 +263,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
         assigned_to_ids: userIds,
         due_date: formData.dueDate ? new Date(formData.dueDate).toISOString() : undefined,
         priority: formData.priority,
+        company_id: currentUser?.company_id,
       };
 
       console.log('[TaskForm] Task payload:', taskPayload);
@@ -300,6 +301,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
             assigned_to_id: userId,
             due_date: formData.dueDate ? new Date(formData.dueDate).toISOString() : undefined,
             priority: formData.priority,
+            company_id: currentUser?.company_id,
           };
 
           console.log('[TaskForm] Creating individual task:', taskPayload);

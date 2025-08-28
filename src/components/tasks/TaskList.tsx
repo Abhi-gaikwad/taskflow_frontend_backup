@@ -56,8 +56,8 @@ export const TaskList: React.FC = () => {
       // For regular users without permissions, fetch only their assigned tasks
       const shouldFetchAllTasks = user?.role === "admin" || canAssignTasks();
       const endpoint = shouldFetchAllTasks
-        ? "/api/v1/tasks"
-        : "/api/v1/my-tasks";
+          ? "/api/v1/tasks/all"
+          : "/api/v1/my-tasks";
 
       console.log("Fetching tasks with endpoint:", endpoint, "for user:", {
         id: user?.id,
@@ -125,18 +125,21 @@ export const TaskList: React.FC = () => {
       const backendStatus =
         newStatus === "in-progress" ? "in_progress" : newStatus;
       const response = await fetch(
-        `${
-          import.meta.env.VITE_ENV == "PRODUCTION"
-            ? import.meta.env.VITE_BACKEND_PROD
-            : import.meta.env.VITE_BACKEND_DEV
-        }/api/v1/tasks/${task.id}/status?status=${backendStatus}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-          },
-        }
-      );
+      `${
+        import.meta.env.VITE_ENV == "PRODUCTION"
+          ? import.meta.env.VITE_BACKEND_PROD
+          : import.meta.env.VITE_BACKEND_DEV
+      }/api/v1/tasks/${task.id}/status?status=${backendStatus}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: backendStatus }),
+      }
+    );
+
       if (response.ok) {
         updateTask(task.id, { ...task, status: newStatus });
       } else {
