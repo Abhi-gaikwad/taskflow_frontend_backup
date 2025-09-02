@@ -1,84 +1,54 @@
-import React, { useState, useEffect } from "react";
-import {
-  Search,
-  Filter,
-  Plus,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  User,
-  AlertTriangle,
-  Clock,
-  CheckCircle,
-  Edit,
-  Trash2,
-  ArrowLeft,
-  Users,
-  BarChart3,
-  X,
+// src/components/tasks/TaskList.tsx
+
+import { useState, useEffect } from 'react';
+import { 
+  Calendar, 
+  User, 
+  AlertCircle, 
+  Clock, 
+  CheckCircle, 
+  Play, 
+  Pause,
   Eye,
-  Save,
-  Layers,
-  FileText,
-  UserPlus,
-  UserCheck,
-  Loader2,
-} from "lucide-react";
-import { useApp } from "../../contexts/AppContext";
-import { useAuth } from "../../contexts/AuthContext";
-import { TaskForm } from "./TaskForm";
-import { Modal } from "../common/Modal";
-import { Button } from "../common/Button";
+  Edit3,
+  Trash2,
+  Users,
+  ChevronRight,
+  ArrowLeft,
+  Filter,
+  Search,
+  Target,
+  TrendingUp
+} from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { Button } from '../common/Button';
+import { Toast } from '../common/Toast';
+import { tasksAPI } from '../../services/api';
 
-// Enhanced Types
-interface Task {
-  id: number;
+// Types based on your API responses
+interface TaskGroupedResponse {
   title: string;
   description: string;
-  priority: "low" | "medium" | "high" | "urgent";
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   created_at: string;
-  due_date?: string;
-  status: "pending" | "in_progress" | "completed";
-  assigned_to_id: number;
-  assignee_name: string;
-  creator_name: string;
-  created_by: number;
-  completed_at?: string;
+  due_date: string;
 }
 
-interface GroupedTask {
-  id?: number;
-  title: string;
-  description: string;
-  priority: "low" | "medium" | "high" | "urgent";
-  created_at: string;
-  due_date?: string;
-  task_type?: "group" | "single";
-  created_by?: number;
-  assignee_count?: number;
-  tasks?: Task[]; // Store individual tasks for status updates
-}
-
-interface TaskDetailUser {
+interface TaskAssigneeDetails {
   assigned_to_id: number;
   full_name: string;
-  completed_at?: string;
-  status: "pending" | "in_progress" | "completed";
-  is_current_user?: boolean;
-  task_id?: number; // Add task_id for status updates
+  completed_at: string | null;
+  status: 'pending' | 'in_progress' | 'completed';
+  task_id?: number; // Add task_id to track individual tasks
 }
 
-interface TaskDetails {
-  id?: number;
+interface TaskDetailResponse {
   title: string;
   description: string;
-  priority: "low" | "medium" | "high" | "urgent";
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   created_at: string;
-  due_date?: string;
-  created_by?: number;
-  task_type?: "group" | "single";
-  assignees: TaskDetailUser[];
+  due_date: string;
+  assignees: TaskAssigneeDetails[];
   analytics: {
     total_assignees: number;
     completed: number;
@@ -87,1023 +57,929 @@ interface TaskDetails {
   };
 }
 
-export const TaskList: React.FC = () => {
-  const { addNotification } = useApp();
-  const { user, canAssignTasks } = useAuth();
-  
-  // State management
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
-  const [groupedTasks, setGroupedTasks] = useState<GroupedTask[]>([]);
-  const [selectedTask, setSelectedTask] = useState<TaskDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [statusUpdating, setStatusUpdating] = useState<number | null>(null);
-  
-  // Enhanced filter states
-  const [searchTerm, setSearchTerm] = useState("");
-  const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [taskTypeFilter, setTaskTypeFilter] = useState<string>("all");
-  const [assignmentFilter, setAssignmentFilter] = useState<string>("all"); // New filter
-  const [showFilters, setShowFilters] = useState(false);
-  
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(9);
+interface IndividualTask {
+  id: number;
+  title: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  assigned_to_id: number;
+  created_by: number;
+  company_id: number;
+  created_at: string;
+  due_date: string;
+  completed_at?: string;
+  assignee_name?: string;
+  creator_name?: string;
+}
 
-  useEffect(() => {
-    fetchAllTasks();
-  }, [user]);
+interface TaskListProps {
+  onCreateTask?: () => void;
+}
 
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, priorityFilter, taskTypeFilter, assignmentFilter]);
-
-  const fetchAllTasks = async () => {
+// Extended API methods for the task operations
+const tasksAPIExtended = {
+  ...tasksAPI,
+  
+  getAssignedTasksGrouped: async (params?: any) => {
+    console.log("[API] Getting assigned tasks grouped with params:", params);
     try {
-      setLoading(true);
-      const baseUrl =
-        import.meta.env.VITE_ENV === "PRODUCTION"
-          ? import.meta.env.VITE_BACKEND_PROD
-          : import.meta.env.VITE_BACKEND_DEV;
-
-      const token = localStorage.getItem("access_token");
-
-      // Fetch from multiple endpoints based on user role
-      let endpoints: string[] = [];
-
-      if (user?.role?.toLowerCase() === "admin") {
-        endpoints = ["/tasks/all", "/tasks-assigned", "/my-tasks"];
-      } else if (user?.role?.toLowerCase() === "user" && canAssignTasks()) {
-
-        console.log("User can assign tasks, fetching all relevant endpoints"); 
-        endpoints = ["/tasks-assigned", "/my-tasks"];
-      } else {
-        endpoints = ["/my-tasks"];
-      }
-
-      // Fetch all tasks from different endpoints
-        const responses = await Promise.all(
-      endpoints.map(async (endpoint) => {
-        const res = await fetch(`${baseUrl}/api/v1${endpoint}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-        if (!res.ok) {
-          console.warn(`Failed to fetch ${endpoint}: ${res.status}`);
-          return [];
-        }
-        return res.json();
-      })
-    );
-
-      // Flatten and deduplicate tasks
-      const allTasksFlat = responses.flat();
-      const uniqueTasksMap = new Map();
+      const queryString = params ? new URLSearchParams(params).toString() : '';
+      const url = `${import.meta.env.VITE_ENV == "PRODUCTION" 
+        ? import.meta.env.VITE_BACKEND_PROD 
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/tasks-assigned${queryString ? '?' + queryString : ''}`;
       
-      allTasksFlat.forEach((task: Task) => {
-        const key = `${task.id}`;
-        if (!uniqueTasksMap.has(key)) {
-          uniqueTasksMap.set(key, task);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
         }
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("[API] Retrieved assigned tasks grouped:", data.length);
+      return data;
+    } catch (error: any) {
+      console.error("[API] Failed to get assigned tasks grouped:", error.message);
+      throw error;
+    }
+  },
 
-      const uniqueTasks = Array.from(uniqueTasksMap.values());
-      setAllTasks(uniqueTasks);
+  getAllTasksGrouped: async (params?: any) => {
+    console.log("[API] Getting all tasks grouped with params:", params);
+    try {
+      const queryString = params ? new URLSearchParams(params).toString() : '';
+      const url = `${import.meta.env.VITE_ENV == "PRODUCTION" 
+        ? import.meta.env.VITE_BACKEND_PROD 
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/tasks/all${queryString ? '?' + queryString : ''}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("[API] Retrieved all tasks grouped:", data.length);
+      return data;
+    } catch (error: any) {
+      console.error("[API] Failed to get all tasks grouped:", error.message);
+      throw error;
+    }
+  },
 
-      // Group tasks by title, description, priority, and dates
-      const grouped = groupTasksByTitleAndDetails(uniqueTasks);
-      setGroupedTasks(grouped);
+  getTaskDetails: async (title: string, params?: any) => {
+    console.log("[API] Getting task details for title:", title);
+    try {
+      const queryParams = new URLSearchParams({ title, ...params });
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
+        ? import.meta.env.VITE_BACKEND_PROD 
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/task-details?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("[API] Retrieved task details for:", title);
+      return data;
+    } catch (error: any) {
+      console.error("[API] Failed to get task details:", error.message);
+      throw error;
+    }
+  },
 
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-      setError("Failed to load tasks");
+  // NEW: Get individual tasks by title to find task IDs for status updates
+  getIndividualTasksByTitle: async (title: string): Promise<IndividualTask[]> => {
+    console.log("[API] Getting individual tasks by title:", title);
+    try {
+      // Use the my-tasks endpoint with search parameter
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
+        ? import.meta.env.VITE_BACKEND_PROD 
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/my-tasks?search=${encodeURIComponent(title)}&limit=1000`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      // Filter to exact title match
+      const exactMatches = data.filter((task: IndividualTask) => task.title === title);
+      console.log("[API] Retrieved individual tasks by title:", exactMatches.length);
+      return exactMatches;
+    } catch (error: any) {
+      console.error("[API] Failed to get individual tasks:", error.message);
+      throw error;
+    }
+  },
+
+  updateTaskByTitle: async (title: string, updates: any) => {
+    console.log("[API] Updating task by title:", title, "with updates:", updates);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
+        ? import.meta.env.VITE_BACKEND_PROD 
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/tasks/by-title?title=${encodeURIComponent(title)}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updates)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("[API] Task updated by title successfully");
+      return data;
+    } catch (error: any) {
+      console.error("[API] Failed to update task by title:", error.message);
+      throw error;
+    }
+  }
+};
+
+export const TaskList = ({ onCreateTask }: TaskListProps) => {
+  const { user: currentUser, canAssignTasks } = useAuth();
+  
+  // State management
+  const [tasks, setTasks] = useState<TaskGroupedResponse[]>([]);
+  const [selectedTask, setSelectedTask] = useState<TaskDetailResponse | null>(null);
+  const [individualTasks, setIndividualTasks] = useState<IndividualTask[]>([]);
+  const [myTasks, setMyTasks] = useState<IndividualTask[]>([]); // Tasks assigned TO current user
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  
+  // Filter and search states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Toast state
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  // Helper function to convert individual tasks to grouped format
+  const convertToGroupedFormat = (tasks: any[]): TaskGroupedResponse[] => {
+    const grouped = new Map();
+    
+    tasks.forEach(task => {
+      const key = `${task.title}-${task.description}-${task.priority}-${task.created_at?.split('T')[0]}-${task.due_date?.split('T')[0]}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          created_at: task.created_at?.split('T')[0],
+          due_date: task.due_date?.split('T')[0]
+        });
+      }
+    });
+    
+    return Array.from(grouped.values());
+  };
+
+  // Fetch grouped tasks
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Determine which endpoint to call based on user permissions
+      let tasksData: TaskGroupedResponse[] = [];
+      let myTasksData: IndividualTask[] = [];
+      
+      if (currentUser?.role === 'super_admin') {
+        // Super admin can see all tasks across all companies
+        tasksData = await tasksAPIExtended.getAllTasksGrouped();
+      } else if (currentUser?.role === 'admin' || currentUser?.role === 'company') {
+        // Admin/Company can see all tasks in their company
+        tasksData = await tasksAPIExtended.getAllTasksGrouped();
+      } else {
+        // For regular users, we need to combine multiple data sources:
+        // 1. Tasks assigned TO them (from /my-tasks)
+        // 2. Tasks created BY them (from /tasks-assigned if they can assign tasks)
+        
+        const allTasks: any[] = [];
+        
+        // Get tasks assigned TO the user
+        try {
+          const myTasksResponse = await tasksAPI.getMyTasks();
+          allTasks.push(...myTasksResponse);
+          myTasksData = myTasksResponse; // Store individual tasks for status updates
+        } catch (error) {
+          console.warn('Could not fetch assigned tasks:', error);
+        }
+        
+        // Get tasks created BY the user (if they have assignment permissions)
+        if (canAssignTasks()) {
+          try {
+            const createdTasks = await tasksAPIExtended.getAssignedTasksGrouped();
+            // Since getAssignedTasksGrouped returns grouped data, we need to handle it differently
+            // For now, we'll add the grouped data directly
+            tasksData.push(...createdTasks);
+          } catch (error) {
+            console.warn('Could not fetch created tasks:', error);
+          }
+        }
+        
+        // Convert individual tasks to grouped format and combine with existing grouped data
+        const groupedFromIndividual = convertToGroupedFormat(allTasks);
+        
+        // Merge and deduplicate tasks based on title, description, priority, and dates
+        const taskMap = new Map();
+        
+        // Add grouped tasks from API
+        tasksData.forEach(task => {
+          const key = `${task.title}-${task.description}-${task.priority}-${task.created_at}-${task.due_date}`;
+          taskMap.set(key, task);
+        });
+        
+        // Add converted individual tasks
+        groupedFromIndividual.forEach(task => {
+          const key = `${task.title}-${task.description}-${task.priority}-${task.created_at}-${task.due_date}`;
+          taskMap.set(key, task);
+        });
+        
+        tasksData = Array.from(taskMap.values());
+      }
+      
+      // Always try to fetch user's assigned tasks for status updates
+      if (!myTasksData.length) {
+        try {
+          myTasksData = await tasksAPI.getMyTasks();
+        } catch (error) {
+          console.warn('Could not fetch my tasks for status updates:', error);
+        }
+      }
+      
+      setTasks(tasksData);
+      setMyTasks(myTasksData);
+    } catch (err: any) {
+      console.error('Error fetching tasks:', err);
+      setError(err.message || 'Failed to fetch tasks');
     } finally {
       setLoading(false);
     }
   };
 
-  const groupTasksByTitleAndDetails = (tasks: Task[]): GroupedTask[] => {
-    const groupMap = new Map<string, GroupedTask>();
-
-    tasks.forEach((task) => {
-      const key = `${task.title}-${task.description}-${task.priority}-${task.created_at.split('T')[0]}-${task.due_date?.split('T')[0] || 'no-due'}`;
-      
-      if (groupMap.has(key)) {
-        const existing = groupMap.get(key)!;
-        existing.assignee_count = (existing.assignee_count || 0) + 1;
-        existing.tasks = existing.tasks || [];
-        existing.tasks.push(task);
-      } else {
-        groupMap.set(key, {
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          created_at: task.created_at,
-          due_date: task.due_date,
-          created_by: task.created_by,
-          assignee_count: 1,
-          task_type: "single",
-          tasks: [task]
-        });
-      }
-    });
-
-    // Set task type based on assignee count
-    return Array.from(groupMap.values()).map(group => ({
-      ...group,
-      task_type: (group.assignee_count || 0) > 1 ? "group" : "single"
-    }));
-  };
-
-  const fetchTaskDetails = async (title: string) => {
+  // Fetch task details with individual task data for status updates
+  const fetchTaskDetail = async (title: string) => {
     try {
-      setDetailsLoading(true);
+      setDetailLoading(true);
       
-      const response = await fetch(
-        `${
-          import.meta.env.VITE_ENV === "PRODUCTION"
-            ? import.meta.env.VITE_BACKEND_PROD
-            : import.meta.env.VITE_BACKEND_DEV
-        }/api/v1/task-details?title=${encodeURIComponent(title)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      // Get both detailed info and individual tasks
+      const [detail, individualTasksData] = await Promise.all([
+        tasksAPIExtended.getTaskDetails(title),
+        tasksAPIExtended.getIndividualTasksByTitle(title)
+      ]);
       
-      // Find individual task IDs for each assignee from our allTasks data
-      const tasksWithSameTitle = allTasks.filter(t => t.title === title);
-      
-      const processedData = {
-        ...data,
-        task_type: data.analytics.total_assignees > 1 ? "group" : "single",
-        assignees: data.assignees.map((assignee: any) => {
-          const matchingTask = tasksWithSameTitle.find(t => t.assigned_to_id === assignee.assigned_to_id);
-          return {
-            ...assignee,
-            is_current_user: assignee.assigned_to_id === user?.id,
-            task_id: matchingTask?.id // Add the specific task ID for this assignee
-          };
-        })
-      };
-
-      setSelectedTask(processedData);
-    } catch (error: any) {
-      console.error("Error fetching task details:", error);
-      addNotification({
-        type: "error",
-        title: "Error",
-        message: "Failed to fetch task details",
-        userId: user?.id || "",
-        isRead: false,
-      });
-    } finally {
-      setDetailsLoading(false);
-    }
-  };
-
-    const updateTaskStatus = async (taskId: number, newStatus: string, assigneeName: string) => {
-      try {
-        setStatusUpdating(taskId);
-        
-        const baseUrl =
-          import.meta.env.VITE_ENV === "PRODUCTION"
-            ? import.meta.env.VITE_BACKEND_PROD
-            : import.meta.env.VITE_BACKEND_DEV;
-
-        const token = localStorage.getItem("access_token");
-
-        // ✅ normalize to match backend enum
-        const normalizedStatus = newStatus.toLowerCase();
-
-        const response = await fetch(
-          `${baseUrl}/api/v1/tasks/${taskId}/status?status=${normalizedStatus}`,
-          {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
+      // Enhance assignees with task IDs from individual tasks
+      const enhancedAssignees = detail.assignees.map((assignee: TaskAssigneeDetails) => {
+        const individualTask = individualTasksData.find(
+          (task: IndividualTask) => task.assigned_to_id === assignee.assigned_to_id
         );
-
-        if (!response.ok) {
-          if (response.status === 403) {
-            throw new Error("You can only update the status of tasks assigned to you");
-          }
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        if (selectedTask) {
-          await fetchTaskDetails(selectedTask.title);
-        }
-        await fetchAllTasks();
-
-        addNotification({
-          type: "success",
-          title: "Status Updated",
-          message: `Task status updated to ${normalizedStatus.replace('_', ' ')}`,
-          userId: user?.id || "",
-          isRead: false,
-        });
-      } catch (error: any) {
-        console.error("Error updating task status:", error);
-        addNotification({
-          type: "error",
-          title: "Update Failed",
-          message: error.message || "Failed to update task status",
-          userId: user?.id || "",
-          isRead: false,
-        });
-      } finally {
-        setStatusUpdating(null);
-      }
-    };
-
-  // Enhanced filter function
-  const filteredTasks = groupedTasks.filter((task) => {
-    const searchLower = searchTerm.toLowerCase().trim();
-    const matchesSearch = !searchLower || 
-      task.title.toLowerCase().includes(searchLower) ||
-      task.description.toLowerCase().includes(searchLower);
-    
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-    
-    const matchesTaskType = taskTypeFilter === "all" || 
-      (taskTypeFilter === "group" && (task.assignee_count || 0) > 1) ||
-      (taskTypeFilter === "single" && (task.assignee_count || 0) === 1);
-    
-    // New assignment filter logic
-    let matchesAssignment = true;
-    if (assignmentFilter === "assigned_by_me") {
-      matchesAssignment = task.created_by === user?.id;
-    } else if (assignmentFilter === "assigned_to_me") {
-      // Check if current user is among the assignees
-      const userTasks = task.tasks?.filter(t => t.assigned_to_id === user?.id) || [];
-      matchesAssignment = userTasks.length > 0;
+        return {
+          ...assignee,
+          task_id: individualTask?.id
+        };
+      });
+      
+      const enhancedDetail = {
+        ...detail,
+        assignees: enhancedAssignees
+      };
+      
+      setSelectedTask(enhancedDetail);
+      setIndividualTasks(individualTasksData);
+      setShowDetail(true);
+    } catch (err: any) {
+      console.error('Error fetching task details:', err);
+      showErrorToast(err.message || 'Failed to fetch task details');
+    } finally {
+      setDetailLoading(false);
     }
+  };
+
+  // Update task status (for assignees) - IMPROVED VERSION
+  const handleUpdateTaskStatus = async (
+    taskId: number,
+    newStatus: 'pending' | 'in_progress' | 'completed'
+  ) => {
+    try {
+      // Update the status using the correct task ID and API endpoint
+      await tasksAPI.updateTaskStatus(taskId, newStatus);
+      showSuccessToast(`Task status updated to ${newStatus.replace('_', ' ')}`);
+      
+      // Refresh the task list and detail view
+      fetchTasks();
+      if (selectedTask) {
+        fetchTaskDetail(selectedTask.title);
+      }
+    } catch (err: any) {
+      console.error('Error updating task status:', err);
+      showErrorToast(err.message || 'Failed to update task status');
+    }
+  };
+
+  // Quick status update from main list
+  const handleQuickStatusUpdate = async (
+    taskTitle: string,
+    taskId: number,
+    newStatus: 'pending' | 'in_progress' | 'completed'
+  ) => {
+    try {
+      await tasksAPI.updateTaskStatus(taskId, newStatus);
+      showSuccessToast(`"${taskTitle}" status updated to ${newStatus.replace('_', ' ')}`);
+      fetchTasks(); // Refresh the task list
+    } catch (err: any) {
+      console.error('Error updating task status:', err);
+      showErrorToast(err.message || 'Failed to update task status');
+    }
+  };
+
+  // Check if current user has this task assigned to them
+  const getUserTaskForTitle = (taskTitle: string): IndividualTask | null => {
+    return myTasks.find(task => 
+      task.title === taskTitle && task.assigned_to_id === currentUser?.id
+    ) || null;
+  };
+
+  // Update task (for creators/admins)
+  const handleUpdateTask = async (title: string, updates: any) => {
+    try {
+      await tasksAPIExtended.updateTaskByTitle(title, updates);
+      showSuccessToast('Task updated successfully');
+      fetchTasks(); // Refresh the list
+      if (selectedTask && selectedTask.title === title) {
+        fetchTaskDetail(title); // Refresh detail view
+      }
+    } catch (err: any) {
+      console.error('Error updating task:', err);
+      showErrorToast(err.message || 'Failed to update task');
+    }
+  };
+
+  // Delete task (if you implement this endpoint)
+  const handleDeleteTask = async (taskId: number) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
     
-    return matchesSearch && matchesPriority && matchesTaskType && matchesAssignment;
-  });
-
-  // Get user's task from a group for status display/update on cards
-  const getUserTaskFromGroup = (groupedTask: GroupedTask): Task | null => {
-    return groupedTask.tasks?.find(t => t.assigned_to_id === user?.id) || null;
+    try {
+      await tasksAPI.deleteTask(taskId);
+      showSuccessToast('Task deleted successfully');
+      fetchTasks();
+      setShowDetail(false);
+    } catch (err: any) {
+      console.error('Error deleting task:', err);
+      showErrorToast(err.message || 'Failed to delete task');
+    }
   };
 
-  // Check if user can update status on card
-  const canUpdateStatusOnCard = (groupedTask: GroupedTask): boolean => {
-    const userTask = getUserTaskFromGroup(groupedTask);
-    return userTask !== null; // User can only update if they're assigned to this task
+  // Toast helpers
+  const showSuccessToast = (message: string) => {
+    setToastMessage(message);
+    setToastType('success');
+    setShowToast(true);
   };
 
-  // Pagination
-  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedTasks = filteredTasks.slice(startIndex, startIndex + itemsPerPage);
-
-  const handleCreateTask = async () => {
-    await fetchAllTasks();
-    setIsCreateModalOpen(false);
+  const showErrorToast = (message: string) => {
+    setToastMessage(message);
+    setToastType('error');
+    setShowToast(true);
   };
 
-  const handleCardClick = (task: GroupedTask) => {
-    fetchTaskDetails(task.title);
-  };
-
-  const handleBackToList = () => {
-    setSelectedTask(null);
-    fetchAllTasks();
-  };
-
-  const clearSearch = () => {
-    setSearchTerm("");
-  };
-
-  const clearFilters = () => {
-    setSearchTerm("");
-    setPriorityFilter("all");
-    setTaskTypeFilter("all");
-    setAssignmentFilter("all");
-  };
-
-  const getPriorityStyle = (priority: string) => {
-    const styles = {
-      low: "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm",
-      medium: "bg-amber-50 text-amber-700 border-amber-200 shadow-sm",
-      high: "bg-orange-50 text-orange-700 border-orange-200 shadow-sm",
-      urgent: "bg-red-50 text-red-700 border-red-200 shadow-sm",
-    };
-    return styles[priority as keyof typeof styles] || styles.medium;
+  // Priority styling
+  const getPriorityColor = (priority: string) => {
+    switch (priority?.toLowerCase()) {
+      case 'urgent': return 'bg-red-100 text-red-800 border-red-200';
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
   };
 
   const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case "urgent":
-        return <AlertTriangle className="w-3 h-3" />;
-      case "high":
-        return <Clock className="w-3 h-3" />;
-      default:
-        return null;
+    switch (priority?.toLowerCase()) {
+      case 'urgent': return <AlertCircle className="w-4 h-4" />;
+      case 'high': return <TrendingUp className="w-4 h-4" />;
+      case 'medium': return <Target className="w-4 h-4" />;
+      case 'low': return <Clock className="w-4 h-4" />;
+      default: return <Clock className="w-4 h-4" />;
     }
   };
 
-  const getStatusStyle = (status: string) => {
-    const styles = {
-      pending: "bg-slate-100 text-slate-700 border-slate-200",
-      in_progress: "bg-blue-50 text-blue-700 border-blue-200",
-      completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    };
-    return styles[status as keyof typeof styles] || styles.pending;
+  // Status styling
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return 'text-green-600 bg-green-100';
+      case 'in_progress': return 'text-blue-600 bg-blue-100';
+      case 'pending': return 'text-yellow-600 bg-yellow-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
   };
 
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return "No due date";
+  const getStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return <CheckCircle className="w-4 h-4" />;
+      case 'in_progress': return <Play className="w-4 h-4" />;
+      case 'pending': return <Pause className="w-4 h-4" />;
+      default: return <Clock className="w-4 h-4" />;
+    }
+  };
+
+  // Filter tasks
+  const filteredTasks = tasks.filter(task => {
+    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         task.description.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = date.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
+    
+    return matchesSearch && matchesPriority;
+  });
 
-    if (diffDays < 0) return { text: `${Math.abs(diffDays)} days overdue`, isOverdue: true };
-    if (diffDays === 0) return { text: "Due today", isToday: true };
-    if (diffDays === 1) return { text: "Due tomorrow", isUpcoming: true };
-    if (diffDays <= 7) return { text: `${diffDays} days left`, isUpcoming: true };
-    return { text: date.toLocaleDateString(), isNormal: true };
+  // Format date
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
-  // Check if user can change status (only assignees can change their own status)
-  const canChangeStatus = (assignee: TaskDetailUser) => {
-    return assignee.is_current_user;
+  // Check if date is overdue
+  const isOverdue = (dueDateString: string) => {
+    return new Date(dueDateString) < new Date();
   };
 
-  // Check if user is task creator or can see all assignees
-  const canSeeAllAssignees = (task: TaskDetails) => {
-    return user?.role === "admin" || 
-           task.created_by === user?.id || 
-           canAssignTasks();
-  };
-
-  // Filter assignees based on user permissions
-  const getVisibleAssignees = (task: TaskDetails) => {
-    if (canSeeAllAssignees(task)) {
-      return task.assignees;
-    }
-    return task.assignees.filter(assignee => assignee.assigned_to_id === user?.id);
-  };
+  useEffect(() => {
+    fetchTasks();
+  }, []);
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-64 space-y-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-2 border-slate-200 border-t-blue-600"></div>
-        <p className="text-slate-500 text-sm">Loading your tasks...</p>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-3 text-gray-600">Loading tasks...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full mb-4">
-          <AlertTriangle className="w-8 h-8 text-red-500" />
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center">
+          <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+          <span className="text-red-700">{error}</span>
         </div>
-        <h3 className="text-lg font-semibold text-slate-900 mb-2">Something went wrong</h3>
-        <p className="text-slate-600 mb-6">{error}</p>
-        <Button onClick={fetchAllTasks}>Try Again</Button>
+        <Button 
+          variant="secondary" 
+          size="sm" 
+          onClick={fetchTasks} 
+          className="mt-2"
+        >
+          Try Again
+        </Button>
       </div>
     );
   }
 
-  const isCurrentUserAdmin = user?.role === "admin";
-  const userCanAssign = canAssignTasks();
-
-  // Task Details View
-  if (selectedTask) {
-    const dueDateInfo = formatDate(selectedTask.due_date);
-    const visibleAssignees = getVisibleAssignees(selectedTask);
-    const isTaskCreator = canSeeAllAssignees(selectedTask);
-    
+  // Detail View
+  if (showDetail && selectedTask) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Detail Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button
-              variant="secondary"
-              icon={ArrowLeft}
-              onClick={handleBackToList}
-              className="shadow-sm"
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => setShowDetail(false)}
+              className="flex items-center"
             >
+              <ArrowLeft className="w-4 h-4 mr-1" />
               Back to Tasks
             </Button>
-            <div>
-              <div className="flex items-center space-x-3 mb-2">
-                <h1 className="text-3xl font-bold text-slate-900">{selectedTask.title}</h1>
-                <div className="flex items-center space-x-2">
-                  {selectedTask.task_type === "group" ? (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-medium">
-                      <Layers className="w-3 h-3 mr-1" />
-                      Group Task
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
-                      <FileText className="w-3 h-3 mr-1" />
-                      Single Task
-                    </span>
-                  )}
-                </div>
-              </div>
-              <p className="text-slate-600">{selectedTask.description}</p>
-            </div>
+            <h2 className="text-xl font-semibold text-gray-900">Task Details</h2>
           </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200/50 overflow-hidden">
-          {/* Task Overview */}
-          <div className="p-8 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Priority</p>
-                <div className={`inline-flex items-center space-x-2 px-4 py-2 text-sm font-semibold rounded-full border ${getPriorityStyle(selectedTask.priority)}`}>
-                  {getPriorityIcon(selectedTask.priority)}
-                  <span>{selectedTask.priority.toUpperCase()}</span>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Created</p>
-                <p className="text-slate-900 font-medium">
-                  {new Date(selectedTask.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Due Date</p>
-                <div className={`flex items-center space-x-2 font-medium ${
-                  typeof dueDateInfo === 'object' && dueDateInfo.isOverdue ? 'text-red-600' :
-                  typeof dueDateInfo === 'object' && dueDateInfo.isToday ? 'text-orange-600' :
-                  typeof dueDateInfo === 'object' && dueDateInfo.isUpcoming ? 'text-blue-600' :
-                  'text-slate-600'
-                }`}>
-                  <Calendar className="w-4 h-4" />
-                  <span className="text-sm">
-                    {typeof dueDateInfo === 'object' ? dueDateInfo.text : dueDateInfo}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">
-                  {isTaskCreator ? "All Assignees" : "Your Assignment"}
-                </p>
-                <div className="flex items-center space-x-2">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  <span className="text-slate-900 font-medium">
-                    {isTaskCreator ? selectedTask.analytics.total_assignees : visibleAssignees.length}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Analytics - Only show for task creators or admins */}
-          {isTaskCreator && (
-            <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center space-x-3 mb-6">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <BarChart3 className="w-5 h-5 text-blue-600" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">Progress Analytics</h3>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <p className="text-sm text-slate-500 font-medium mb-2">Total</p>
-                  <p className="text-3xl font-bold text-slate-900">{selectedTask.analytics.total_assignees}</p>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <p className="text-sm text-slate-500 font-medium mb-2">Pending</p>
-                  <p className="text-3xl font-bold text-slate-400">{selectedTask.analytics.pending}</p>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <p className="text-sm text-blue-600 font-medium mb-2">In Progress</p>
-                  <p className="text-3xl font-bold text-blue-600">{selectedTask.analytics.in_progress}</p>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <p className="text-sm text-emerald-600 font-medium mb-2">Completed</p>
-                  <p className="text-3xl font-bold text-emerald-600">{selectedTask.analytics.completed}</p>
-                </div>
-              </div>
+          
+          {(canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+            <div className="flex items-center space-x-2">
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => {
+                  const newTitle = prompt('Enter new title:', selectedTask.title);
+                  const newDescription = prompt('Enter new description:', selectedTask.description);
+                  
+                  if (newTitle !== null && newDescription !== null) {
+                    handleUpdateTask(selectedTask.title, {
+                      title: newTitle.trim() || selectedTask.title,
+                      description: newDescription.trim() || selectedTask.description
+                    });
+                  }
+                }}
+              >
+                <Edit3 className="w-4 h-4 mr-1" />
+                Edit
+              </Button>
             </div>
           )}
+        </div>
 
-          {/* Assignees List */}
-          <div className="p-8">
-            <h3 className="text-xl font-bold text-slate-900 mb-6">
-              {isTaskCreator ? "All Assigned Users" : "Your Task Assignment"}
-            </h3>
-            
-            {detailsLoading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-blue-600"></div>
+        {detailLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="ml-2 text-gray-600">Loading details...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Task Info */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white rounded-lg border p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {selectedTask.title}
+                    </h3>
+                    <div className="flex items-center space-x-4 text-sm text-gray-600">
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 mr-1" />
+                        Created: {formatDate(selectedTask.created_at)}
+                      </div>
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 mr-1" />
+                        Due: {formatDate(selectedTask.due_date)}
+                        {isOverdue(selectedTask.due_date) && (
+                          <span className="ml-1 text-red-600 font-medium">(Overdue)</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`px-3 py-1 rounded-full border text-sm font-medium flex items-center ${getPriorityColor(selectedTask.priority)}`}>
+                    {getPriorityIcon(selectedTask.priority)}
+                    <span className="ml-1 capitalize">{selectedTask.priority}</span>
+                  </div>
+                </div>
+                
+                {selectedTask.description && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
+                    <p className="text-gray-600 leading-relaxed">{selectedTask.description}</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="space-y-4">
-                {visibleAssignees.map((assignee, index) => {
-                  const canUpdateStatus = canChangeStatus(assignee);
-                  
-                  return (
-                    <div key={index} className="flex items-center justify-between p-6 bg-slate-50/50 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center space-x-4">
-                        <div className="p-2 bg-slate-200 rounded-full">
-                          <User className="w-5 h-5 text-slate-600" />
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <p className="font-semibold text-slate-900">{assignee.full_name}</p>
-                            {assignee.is_current_user && (
-                              <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                                You
-                              </span>
+
+              {/* Assignees List */}
+              <div className="bg-white rounded-lg border p-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Users className="w-5 h-5 mr-2" />
+                  Assigned Users ({selectedTask.assignees.length})
+                </h4>
+                
+                <div className="space-y-3">
+                  {selectedTask.assignees.map((assignee, index) => {
+                    const isCurrentUserAssignee = currentUser?.id === assignee.assigned_to_id;
+                    
+                    return (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center flex-1">
+                          <User className="w-8 h-8 text-gray-400 mr-3" />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">
+                              {assignee.full_name}
+                              {isCurrentUserAssignee && (
+                                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            {assignee.completed_at && (
+                              <div className="text-sm text-gray-500">
+                                Completed: {formatDate(assignee.completed_at)}
+                              </div>
                             )}
                           </div>
-                          <p className="text-sm text-slate-500">ID: {assignee.assigned_to_id}</p>
-                          {!isTaskCreator && assignee.is_current_user && (
-                            <p className="text-xs text-blue-600 mt-1 font-medium">You can update your task status</p>
-                          )}
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-6">
-                        {canUpdateStatus && assignee.task_id ? (
-                          <div className="flex items-center space-x-3">
+                        
+                        <div className="flex items-center space-x-3">
+                          {/* Status Display/Selector */}
+                          {isCurrentUserAssignee && assignee.task_id ? (
+                            // Current user can change their own task status
                             <select
                               value={assignee.status}
-                              onChange={(e) => updateTaskStatus(assignee.task_id!, e.target.value, assignee.full_name)}
-                              disabled={statusUpdating === assignee.task_id}
-                              className={`px-4 py-2 text-sm font-medium rounded-full border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${getStatusStyle(assignee.status)} ${
-                                statusUpdating === assignee.task_id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-sm'
-                              }`}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value as 'pending' | 'in_progress' | 'completed';
+                                
+                                if (window.confirm(`Update your task status to ${newStatus.replace('_', ' ')}?`)) {
+                                  if (assignee.task_id) {
+                                    await handleUpdateTaskStatus(assignee.task_id, newStatus);
+                                  }
+                                }
+                              }}
+                              className={`px-3 py-1 rounded-full text-sm font-medium border focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${getStatusColor(assignee.status)}`}
                             >
                               <option value="pending">Pending</option>
                               <option value="in_progress">In Progress</option>
                               <option value="completed">Completed</option>
                             </select>
-                            {statusUpdating === assignee.task_id && (
-                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-200 border-t-blue-600"></div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-3">
-                            <span className={`inline-flex px-4 py-2 text-sm font-medium rounded-full border ${getStatusStyle(assignee.status)}`}>
-                              {assignee.status === "in_progress" ? "In Progress" : 
-                               assignee.status === "pending" ? "Pending" : "Completed"}
-                            </span>
-                            {!assignee.is_current_user && isTaskCreator && (
-                              <span className="text-xs text-slate-500 font-medium">
-                                (Assignee only)
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        
-                        {assignee.completed_at && (
-                          <div className="text-sm text-slate-500">
-                            Completed: {new Date(assignee.completed_at).toLocaleDateString()}
-                          </div>
-                        )}
+                          ) : (
+                            // Other users' statuses are read-only
+                            <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${getStatusColor(assignee.status)}`}>
+                              {getStatusIcon(assignee.status)}
+                              <span className="ml-1 capitalize">{assignee.status.replace('_', ' ')}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+
+                {/* Status Update Instructions */}
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start">
+                    <AlertCircle className="w-4 h-4 text-blue-500 mr-2 mt-0.5" />
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium">Status Updates:</p>
+                      <ul className="mt-1 space-y-1 text-xs">
+                        <li>• <strong>Pending:</strong> Task not started yet</li>
+                        <li>• <strong>In Progress:</strong> Currently working on the task</li>
+                        <li>• <strong>Completed:</strong> Task finished successfully</li>
+                      </ul>
+                      {selectedTask.assignees.some(a => a.assigned_to_id === currentUser?.id) && (
+                        <p className="mt-2 text-xs text-blue-600">
+                          You can update your task status using the dropdown above. The task creator will be notified of status changes.
+                        </p>
+                      )}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
+
+            {/* Analytics Sidebar */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg border p-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Progress Overview</h4>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Total Assignees</span>
+                    <span className="font-semibold text-gray-900">{selectedTask.analytics.total_assignees}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-green-600 flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Completed
+                    </span>
+                    <span className="font-semibold text-green-600">{selectedTask.analytics.completed}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-600 flex items-center">
+                      <Play className="w-4 h-4 mr-1" />
+                      In Progress
+                    </span>
+                    <span className="font-semibold text-blue-600">{selectedTask.analytics.in_progress}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-yellow-600 flex items-center">
+                      <Pause className="w-4 h-4 mr-1" />
+                      Pending
+                    </span>
+                    <span className="font-semibold text-yellow-600">{selectedTask.analytics.pending}</span>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mt-6">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>Completion Rate</span>
+                    <span>
+                      {Math.round((selectedTask.analytics.completed / selectedTask.analytics.total_assignees) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${(selectedTask.analytics.completed / selectedTask.analytics.total_assignees) * 100}%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
 
-  // Main Task Cards View
+  // Main List View
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Task Management</h1>
-          <p className="text-slate-600 mt-1">
-            {isCurrentUserAdmin || userCanAssign
-              ? "Manage and track all your tasks"
-              : "Your assigned tasks"}
-          </p>
+          <h2 className="text-2xl font-bold text-gray-900">Tasks</h2>
+          <p className="text-gray-600">Manage and track your tasks</p>
         </div>
-        {(isCurrentUserAdmin || userCanAssign) && (
-          <Button icon={Plus} onClick={() => setIsCreateModalOpen(true)} className="shadow-sm">
+        
+        {(canAssignTasks() || currentUser?.role === 'admin') && onCreateTask && (
+          <Button onClick={onCreateTask} className="flex items-center">
+            <User className="w-4 h-4 mr-2" />
             Create Task
           </Button>
         )}
       </div>
 
-      {/* Enhanced Search and Filters */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/50">
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg border p-4">
+        <div className="flex items-center space-x-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
               placeholder="Search tasks by title or description..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-12 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900 placeholder-slate-400"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            {searchTerm && (
-              <button
-                onClick={clearSearch}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
           </div>
+          
           <Button
             variant="secondary"
-            icon={Filter}
+            size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="shadow-sm"
+            className="flex items-center"
           >
+            <Filter className="w-4 h-4 mr-1" />
             Filters
-            <ChevronDown className={`ml-2 w-4 h-4 transition-transform ${showFilters ? "rotate-180" : ""}`} />
           </Button>
         </div>
 
         {showFilters && (
-          <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-100">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
-              {/* Assignment Filter */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-3">
-                  Assignment Type
-                </label>
-                <select
-                  value={assignmentFilter}
-                  onChange={(e) => setAssignmentFilter(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900"
-                >
-                  <option value="all">All Tasks</option>
-                  <option value="assigned_by_me">Assigned by Me</option>
-                  <option value="assigned_to_me">Assigned to Me</option>
-                </select>
-              </div>
-
-              {/* Task Type Filter */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-3">
-                  Task Type
-                </label>
-                <select
-                  value={taskTypeFilter}
-                  onChange={(e) => setTaskTypeFilter(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900"
-                >
-                  <option value="all">All Tasks</option>
-                  <option value="group">Group Tasks</option>
-                  <option value="single">Single Tasks</option>
-                </select>
-              </div>
-
-              {/* Priority Filter */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-3">
-                  Priority Level
-                </label>
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900"
-                >
-                  <option value="all">All Priorities</option>
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-              </div>
-
-              {/* Items per page */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-3">
-                  Items per page
-                </label>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => {
-                    setItemsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-900"
-                >
-                  <option value={6}>6 items</option>
-                  <option value={9}>9 items</option>
-                  <option value={12}>12 items</option>
-                  <option value={18}>18 items</option>
-                  <option value={24}>24 items</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              {(searchTerm || priorityFilter !== "all" || taskTypeFilter !== "all" || assignmentFilter !== "all") && (
-                <div className="flex items-center space-x-2 text-sm text-slate-600">
-                  <span>Active filters:</span>
-                  <div className="flex flex-wrap gap-2">
-                    {searchTerm && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-                        Search: "{searchTerm}"
-                      </span>
-                    )}
-                    {assignmentFilter !== "all" && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                        {assignmentFilter === "assigned_by_me" ? "Assigned by Me" : "Assigned to Me"}
-                      </span>
-                    )}
-                    {taskTypeFilter !== "all" && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-medium">
-                        Type: {taskTypeFilter === "group" ? "Group Tasks" : "Single Tasks"}
-                      </span>
-                    )}
-                    {priorityFilter !== "all" && (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-medium">
-                        Priority: {priorityFilter}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              <Button
-                variant="secondary"
-                onClick={clearFilters}
-                className="ml-auto"
-                size="sm"
+          <div className="mt-4 pt-4 border-t flex items-center space-x-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                Clear All Filters
-              </Button>
+                <option value="all">All Priorities</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
             </div>
           </div>
         )}
       </div>
 
-      {/* Enhanced Task Cards Grid with Status Update */}
+      {/* Task Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {paginatedTasks.length > 0 ? (
-          paginatedTasks.map((task, index) => {
-            //  REPLACE THE EXISTING RETURN BLOCK INSIDE paginatedTasks.map() WITH THIS
-
-          const dueDateInfo = formatDate(task.due_date);
-          const isGroupTask = (task.assignee_count || 0) > 1;
-          const userTask = getUserTaskFromGroup(task);
-          const canUpdateOnCard = canUpdateStatusOnCard(task);
-          const isCreatedByUser = task.created_by === user?.id;
-
-          // Conditionally set the click handler and cursor style
-          const onCardClick = isCreatedByUser ? () => handleCardClick(task) : undefined;
-          const cardCursorClass = isCreatedByUser ? "cursor-pointer" : "";
-
-          return (
-            <div
-              key={index}
-              className="group bg-white rounded-xl shadow-sm border border-slate-200/50 p-5 hover:shadow-md hover:shadow-blue-100/50 hover:border-blue-300/50 transition-all duration-200 hover:-translate-y-1"
-            >
-              <div className="space-y-4">
-                {/* Header with Title and Priority */}
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 space-y-2">
-                    <div 
-                      className={cardCursorClass} // Use conditional cursor
-                      onClick={onCardClick} // Use conditional handler
-                    >
-                      <h3 className="text-base font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors leading-tight">
-                        {task.title}
-                      </h3>
-                    </div>
-                    <div className="flex items-center space-x-2 flex-wrap gap-1">
-                      {isGroupTask ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-medium">
-                          <Layers className="w-3 h-3 mr-1" />
-                          Group ({task.assignee_count})
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
-                          <FileText className="w-3 h-3 mr-1" />
-                          Single
-                        </span>
-                      )}
-                      
-                      {isCreatedByUser && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 text-xs font-medium">
-                          <UserPlus className="w-3 h-3 mr-1" />
-                          Created by you
-                        </span>
-                      )}
-                      
-                      {userTask && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
-                          <UserCheck className="w-3 h-3 mr-1" />
-                          Assigned to you
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className={`inline-flex items-center space-x-1 px-3 py-1 text-xs font-medium rounded-full border ${getPriorityStyle(task.priority)} ml-3 flex-shrink-0`}>
-                    {getPriorityIcon(task.priority)}
-                    <span>{task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}</span>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div 
-                  className={cardCursorClass} // Use conditional cursor
-                  onClick={onCardClick} // Use conditional handler
-                >
-                  <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
-                    {task.description}
+        {filteredTasks.map((task, index) => (
+          <div
+            key={`${task.title}-${index}`}
+            className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 cursor-pointer"
+            onClick={() => fetchTaskDetail(task.title)}
+          >
+            <div className="p-6">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">
+                    {task.title}
+                  </h3>
+                  <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                    {task.description || 'No description provided'}
                   </p>
                 </div>
-
-                {/* Status Update Section (only if user is assigned) */}
-                {canUpdateOnCard && userTask && (
-                  <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Your Status:</span>
-                      <div className="flex items-center space-x-2">
-                        <select
-                          value={userTask.status}
-                          onChange={(e) => updateTaskStatus(userTask.id, e.target.value, userTask.assignee_name)}
-                          disabled={statusUpdating === userTask.id}
-                          className={`px-3 py-1 text-xs font-medium rounded-full border transition-all focus:outline-none focus:ring-1 focus:ring-blue-500/20 ${getStatusStyle(userTask.status)} ${
-                            statusUpdating === userTask.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-sm'
-                          }`}
-                          onClick={(e) => e.stopPropagation()} // Prevent card click when interacting with dropdown
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                        {statusUpdating === userTask.id && (
-                          <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Date Information */}
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500 font-medium">Created</span>
-                    <span className="text-slate-700">
-                      {new Date(task.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500 font-medium">Due</span>
-                    <div className={`flex items-center space-x-1 font-medium ${
-                      typeof dueDateInfo === 'object' && dueDateInfo.isOverdue ? 'text-red-600' :
-                      typeof dueDateInfo === 'object' && dueDateInfo.isToday ? 'text-orange-600' :
-                      typeof dueDateInfo === 'object' && dueDateInfo.isUpcoming ? 'text-blue-600' :
-                      'text-slate-600'
-                    }`}>
-                      <Calendar className="w-3 h-3" />
-                      <span className="text-xs">
-                        {typeof dueDateInfo === 'object' ? dueDateInfo.text : dueDateInfo}
-                      </span>
-                    </div>
-                  </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2" />
+              </div>
+              
+              <div className="flex items-center justify-between mb-4">
+                <div className={`px-2 py-1 rounded-full border text-xs font-medium flex items-center ${getPriorityColor(task.priority)}`}>
+                  {getPriorityIcon(task.priority)}
+                  <span className="ml-1 capitalize">{task.priority}</span>
                 </div>
-
-                {/* View Details Footer - ONLY SHOWS FOR CREATOR */}
-                {isCreatedByUser && (
-                  <div className="pt-3 border-t border-slate-100">
-                    <div 
-                      className="flex items-center justify-between cursor-pointer"
-                      onClick={onCardClick} // Use conditional handler
-                    >
-                      <div className="flex items-center space-x-2">
-                        <Eye className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                        <span className="text-sm text-slate-500 group-hover:text-blue-600 transition-colors font-medium">
-                          View Details
-                        </span>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-                    </div>
-                  </div>
-                )}
+              </div>
+              
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <div className="flex items-center">
+                  <Calendar className="w-4 h-4 mr-1" />
+                  {formatDate(task.created_at)}
+                </div>
+                <div className={`flex items-center ${isOverdue(task.due_date) ? 'text-red-600' : ''}`}>
+                  <Clock className="w-4 h-4 mr-1" />
+                  {formatDate(task.due_date)}
+                  {isOverdue(task.due_date) && <span className="ml-1 font-medium">(Overdue)</span>}
+                </div>
               </div>
             </div>
-          );
-          })
-        ) : (
-          <div className="col-span-full text-center py-16">
-            <div className="flex flex-col items-center">
-              <div className="p-4 bg-slate-100 rounded-full mb-4">
-                <Search className="w-8 h-8 text-slate-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchTerm || priorityFilter !== "all" || taskTypeFilter !== "all" || assignmentFilter !== "all" 
-                  ? "No matching tasks found" 
-                  : "No tasks found"}
-              </h3>
-              <p className="text-slate-500 mb-6 max-w-md">
-                {searchTerm || priorityFilter !== "all" || taskTypeFilter !== "all" || assignmentFilter !== "all"
-                  ? "Try adjusting your search terms or filters to find what you're looking for"
-                  : "No tasks have been created yet. Create your first task to get started"}
-              </p>
-              {(searchTerm || priorityFilter !== "all" || taskTypeFilter !== "all" || assignmentFilter !== "all") && (
-                <Button onClick={clearFilters} variant="secondary">
-                  Clear Filters
+
+            <div className="px-6 pb-4">
+              <div className="flex items-center justify-between">
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchTaskDetail(task.title);
+                  }}
+                  className="flex items-center"
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  View Details
                 </Button>
-              )}
+                
+                {(canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+                  <div className="flex items-center space-x-1">
+                    <Button 
+                      variant="secondary" 
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newTitle = prompt('Enter new title:', task.title);
+                        const newDescription = prompt('Enter new description:', task.description);
+                        
+                        if (newTitle !== null && newDescription !== null) {
+                          handleUpdateTask(task.title, {
+                            title: newTitle.trim() || task.title,
+                            description: newDescription.trim() || task.description
+                          });
+                        }
+                      }}
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        )}
+        ))}
       </div>
 
-      {/* Enhanced Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-6 rounded-xl shadow-sm border border-slate-200/50">
-          <div className="text-sm text-slate-600">
-            Showing <span className="font-semibold text-slate-900">{startIndex + 1}</span> to{" "}
-            <span className="font-semibold text-slate-900">{Math.min(startIndex + itemsPerPage, filteredTasks.length)}</span> of{" "}
-            <span className="font-semibold text-slate-900">{filteredTasks.length}</span> results
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage === 1}
-              className="inline-flex items-center px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Previous
-            </button>
-
-            <div className="flex items-center space-x-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const pageNumber =
-                  Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                return (
-                  <button
-                    key={pageNumber}
-                    onClick={() => setCurrentPage(pageNumber)}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors shadow-sm ${
-                      currentPage === pageNumber
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200"
-                    }`}
-                  >
-                    {pageNumber}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() =>
-                setCurrentPage(Math.min(totalPages, currentPage + 1))
-              }
-              disabled={currentPage === totalPages}
-              className="inline-flex items-center px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-            >
-              Next
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </button>
-          </div>
+      {filteredTasks.length === 0 && (
+        <div className="text-center py-12">
+          <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+          <p className="text-gray-600 mb-4">
+            {searchTerm ? 'No tasks match your search criteria.' : 'You haven\'t created any tasks yet.'}
+          </p>
+          {(canAssignTasks() || currentUser?.role === 'admin') && onCreateTask && (
+            <Button onClick={onCreateTask}>Create Your First Task</Button>
+          )}
         </div>
       )}
 
-      {/* Create Task Modal */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Create New Task"
-        maxWidth="lg"
-      >
-        <TaskForm
-          onSubmit={handleCreateTask}
-          onClose={() => setIsCreateModalOpen(false)}
+      {showToast && (
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setShowToast(false)}
         />
-      </Modal>
+      )}
     </div>
   );
 };

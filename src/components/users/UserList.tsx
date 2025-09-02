@@ -265,7 +265,7 @@ export const UserList: React.FC = () => {
                       <div>
                         <p className="font-medium text-gray-900">{u.full_name}</p>
                         <div className="flex items-center space-x-1 mt-1">
-                          <span className="text-sm text-gray-500">@{u.username}</span>
+                          <span className="text-sm text-gray-500">{u.username}</span>
                         </div>
                       </div>
                     </div>
