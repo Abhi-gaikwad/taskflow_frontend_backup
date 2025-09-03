@@ -18,7 +18,8 @@ import {
   Filter,
   Search,
   Target,
-  TrendingUp
+  TrendingUp,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../common/Button';
@@ -237,6 +238,8 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   const [selectedTask, setSelectedTask] = useState<TaskDetailResponse | null>(null);
   const [individualTasks, setIndividualTasks] = useState<IndividualTask[]>([]);
   const [myTasks, setMyTasks] = useState<IndividualTask[]>([]); // Tasks assigned TO current user
+  const [createdTasks, setCreatedTasks] = useState<IndividualTask[]>([]); // Tasks created BY current user
+  const [hasCreatedTasks, setHasCreatedTasks] = useState(false); // Track if user has created any tasks
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -273,7 +276,21 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
     return Array.from(grouped.values());
   };
 
-  // Fetch grouped tasks
+  // Check if current user created any tasks
+  const checkUserCreatedTasks = async () => {
+    try {
+      if (canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') {
+        // Check if user has created any tasks by looking at tasks-assigned endpoint
+        const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped();
+        setHasCreatedTasks(createdTasksData.length > 0);
+      }
+    } catch (error) {
+      console.warn('Could not check created tasks:', error);
+      setHasCreatedTasks(false);
+    }
+  };
+
+  // Fetch grouped tasks - FIXED VERSION
   const fetchTasks = async () => {
     try {
       setLoading(true);
@@ -286,64 +303,66 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
       if (currentUser?.role === 'super_admin') {
         // Super admin can see all tasks across all companies
         tasksData = await tasksAPIExtended.getAllTasksGrouped();
+        setHasCreatedTasks(true); // Super admin can always see all tasks
       } else if (currentUser?.role === 'admin' || currentUser?.role === 'company') {
         // Admin/Company can see all tasks in their company
         tasksData = await tasksAPIExtended.getAllTasksGrouped();
-      } else {
-        // For regular users, we need to combine multiple data sources:
-        // 1. Tasks assigned TO them (from /my-tasks)
-        // 2. Tasks created BY them (from /tasks-assigned if they can assign tasks)
+        setHasCreatedTasks(true); // Admin can always see all tasks in their company
+      } else if (canAssignTasks()) {
+        // User with task creation permission - FIXED LOGIC
+        await checkUserCreatedTasks();
         
-        const allTasks: any[] = [];
-        
-        // Get tasks assigned TO the user
+        // Always fetch user's assigned tasks first
         try {
-          const myTasksResponse = await tasksAPI.getMyTasks();
-          allTasks.push(...myTasksResponse);
-          myTasksData = myTasksResponse; // Store individual tasks for status updates
+          myTasksData = await tasksAPI.getMyTasks();
         } catch (error) {
           console.warn('Could not fetch assigned tasks:', error);
         }
         
-        // Get tasks created BY the user (if they have assignment permissions)
-        if (canAssignTasks()) {
+        if (hasCreatedTasks) {
+          // If user has created tasks, show combined view: tasks they created + tasks assigned to them
           try {
-            const createdTasks = await tasksAPIExtended.getAssignedTasksGrouped();
-            // Since getAssignedTasksGrouped returns grouped data, we need to handle it differently
-            // For now, we'll add the grouped data directly
-            tasksData.push(...createdTasks);
+            const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped();
+            
+            // Combine created tasks and assigned tasks, removing duplicates
+            const allTaskTitles = new Set();
+            const combinedGroupedTasks: TaskGroupedResponse[] = [];
+            
+            // Add created tasks
+            createdTasksData.forEach(task => {
+              const key = `${task.title}-${task.priority}-${task.due_date}`;
+              if (!allTaskTitles.has(key)) {
+                allTaskTitles.add(key);
+                combinedGroupedTasks.push(task);
+              }
+            });
+            
+            // Add assigned tasks (converted to grouped format) that aren't already included
+            const assignedGrouped = convertToGroupedFormat(myTasksData);
+            assignedGrouped.forEach(task => {
+              const key = `${task.title}-${task.priority}-${task.due_date}`;
+              if (!allTaskTitles.has(key)) {
+                allTaskTitles.add(key);
+                combinedGroupedTasks.push(task);
+              }
+            });
+            
+            tasksData = combinedGroupedTasks;
           } catch (error) {
-            console.warn('Could not fetch created tasks:', error);
+            console.warn('Could not fetch created tasks, showing only assigned tasks:', error);
+            tasksData = convertToGroupedFormat(myTasksData);
           }
+        } else {
+          // If user hasn't created any tasks yet, show only their assigned tasks
+          tasksData = convertToGroupedFormat(myTasksData);
         }
-        
-        // Convert individual tasks to grouped format and combine with existing grouped data
-        const groupedFromIndividual = convertToGroupedFormat(allTasks);
-        
-        // Merge and deduplicate tasks based on title, description, priority, and dates
-        const taskMap = new Map();
-        
-        // Add grouped tasks from API
-        tasksData.forEach(task => {
-          const key = `${task.title}-${task.description}-${task.priority}-${task.created_at}-${task.due_date}`;
-          taskMap.set(key, task);
-        });
-        
-        // Add converted individual tasks
-        groupedFromIndividual.forEach(task => {
-          const key = `${task.title}-${task.description}-${task.priority}-${task.created_at}-${task.due_date}`;
-          taskMap.set(key, task);
-        });
-        
-        tasksData = Array.from(taskMap.values());
-      }
-      
-      // Always try to fetch user's assigned tasks for status updates
-      if (!myTasksData.length) {
+      } else {
+        // For regular users without task creation permission, only show tasks assigned TO them
         try {
           myTasksData = await tasksAPI.getMyTasks();
+          tasksData = convertToGroupedFormat(myTasksData);
         } catch (error) {
-          console.warn('Could not fetch my tasks for status updates:', error);
+          console.warn('Could not fetch assigned tasks:', error);
         }
       }
       
@@ -362,31 +381,67 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
     try {
       setDetailLoading(true);
       
-      // Get both detailed info and individual tasks
-      const [detail, individualTasksData] = await Promise.all([
-        tasksAPIExtended.getTaskDetails(title),
-        tasksAPIExtended.getIndividualTasksByTitle(title)
-      ]);
-      
-      // Enhance assignees with task IDs from individual tasks
-      const enhancedAssignees = detail.assignees.map((assignee: TaskAssigneeDetails) => {
-        const individualTask = individualTasksData.find(
-          (task: IndividualTask) => task.assigned_to_id === assignee.assigned_to_id
-        );
-        return {
-          ...assignee,
-          task_id: individualTask?.id
+      // For regular users without created tasks, build detail view from individual tasks data only
+      if (currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin' && (!canAssignTasks() || !hasCreatedTasks)) {
+        const individualTasksData = await tasksAPIExtended.getIndividualTasksByTitle(title);
+        const userTask = individualTasksData.find(task => task.assigned_to_id === currentUser?.id);
+        
+        if (!userTask) {
+          throw new Error('Task not found or not assigned to you');
+        }
+        
+        // Build detail response from individual task data
+        const mockDetail: TaskDetailResponse = {
+          title: userTask.title,
+          description: userTask.description,
+          priority: userTask.priority,
+          created_at: userTask.created_at,
+          due_date: userTask.due_date,
+          assignees: [{
+            assigned_to_id: userTask.assigned_to_id,
+            full_name: userTask.assignee_name || 'You',
+            completed_at: userTask.completed_at || null,
+            status: userTask.status,
+            task_id: userTask.id
+          }],
+          analytics: {
+            total_assignees: 1,
+            completed: userTask.status === 'completed' ? 1 : 0,
+            in_progress: userTask.status === 'in_progress' ? 1 : 0,
+            pending: userTask.status === 'pending' ? 1 : 0,
+          }
         };
-      });
-      
-      const enhancedDetail = {
-        ...detail,
-        assignees: enhancedAssignees
-      };
-      
-      setSelectedTask(enhancedDetail);
-      setIndividualTasks(individualTasksData);
-      setShowDetail(true);
+        
+        setSelectedTask(mockDetail);
+        setIndividualTasks([userTask]);
+        setShowDetail(true);
+      } else {
+        // For admins and users who have created tasks, use the original logic with full task details
+        const [detail, individualTasksData] = await Promise.all([
+          tasksAPIExtended.getTaskDetails(title),
+          tasksAPIExtended.getIndividualTasksByTitle(title)
+        ]);
+        
+        // Enhance assignees with task IDs from individual tasks
+        const enhancedAssignees = detail.assignees.map((assignee: TaskAssigneeDetails) => {
+          const individualTask = individualTasksData.find(
+            (task: IndividualTask) => task.assigned_to_id === assignee.assigned_to_id
+          );
+          return {
+            ...assignee,
+            task_id: individualTask?.id
+          };
+        });
+        
+        const enhancedDetail = {
+          ...detail,
+          assignees: enhancedAssignees
+        };
+        
+        setSelectedTask(enhancedDetail);
+        setIndividualTasks(individualTasksData);
+        setShowDetail(true);
+      }
     } catch (err: any) {
       console.error('Error fetching task details:', err);
       showErrorToast(err.message || 'Failed to fetch task details');
@@ -454,7 +509,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
     }
   };
 
-  // Delete task (if you implement this endpoint)
+  // Delete task - Updated permissions
   const handleDeleteTask = async (taskId: number) => {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
     
@@ -467,6 +522,20 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
       console.error('Error deleting task:', err);
       showErrorToast(err.message || 'Failed to delete task');
     }
+  };
+
+  // Check if user can delete a task
+  const canDeleteTask = (task: any): boolean => {
+    // Super admin can delete any task
+    if (currentUser?.role === 'super_admin') return true;
+    
+    // Admin can delete tasks in their company
+    if (currentUser?.role === 'admin') return true;
+    
+    // Task creator can delete their own tasks
+    if (individualTasks.some(t => t.created_by === currentUser?.id)) return true;
+    
+    return false;
   };
 
   // Toast helpers
@@ -548,7 +617,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
 
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [hasCreatedTasks]);
 
   if (loading) {
     return (
@@ -597,8 +666,17 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
             <h2 className="text-xl font-semibold text-gray-900">Task Details</h2>
           </div>
           
-          {(canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
+            {/* Always show Create Task button if onCreateTask is provided */}
+            {onCreateTask && (
+              <Button onClick={onCreateTask} className="flex items-center">
+                <Plus className="w-4 h-4 mr-2" />
+                Create Task
+              </Button>
+            )}
+            
+            {/* Edit Button */}
+            {(canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
               <Button 
                 variant="secondary" 
                 size="sm"
@@ -617,8 +695,26 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
                 <Edit3 className="w-4 h-4 mr-1" />
                 Edit
               </Button>
-            </div>
-          )}
+            )}
+            
+            {/* Delete Button */}
+            {canDeleteTask(selectedTask) && individualTasks.length > 0 && (
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => {
+                  const taskToDelete = individualTasks[0];
+                  if (taskToDelete?.id) {
+                    handleDeleteTask(taskToDelete.id);
+                  }
+                }}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete
+              </Button>
+            )}
+          </div>
         </div>
 
         {detailLoading ? (
@@ -668,7 +764,10 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
               <div className="bg-white rounded-lg border p-6">
                 <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <Users className="w-5 h-5 mr-2" />
-                  Assigned Users ({selectedTask.assignees.length})
+                  {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || canAssignTasks()) && hasCreatedTasks
+                    ? `Assigned Users (${selectedTask.assignees.length})`
+                    : 'Your Assignment'
+                  }
                 </h4>
                 
                 <div className="space-y-3">
@@ -697,15 +796,14 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
                         </div>
                         
                         <div className="flex items-center space-x-3">
-                          {/* Status Display/Selector */}
-                          {isCurrentUserAssignee && assignee.task_id ? (
-                            // Current user can change their own task status
+                          {/* Status Display/Selector - All users can change their own status */}
+                          {assignee.task_id ? (
                             <select
                               value={assignee.status}
                               onChange={async (e) => {
                                 const newStatus = e.target.value as 'pending' | 'in_progress' | 'completed';
                                 
-                                if (window.confirm(`Update your task status to ${newStatus.replace('_', ' ')}?`)) {
+                                if (window.confirm(`Update task status to ${newStatus.replace('_', ' ')}?`)) {
                                   if (assignee.task_id) {
                                     await handleUpdateTaskStatus(assignee.task_id, newStatus);
                                   }
@@ -718,7 +816,6 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
                               <option value="completed">Completed</option>
                             </select>
                           ) : (
-                            // Other users' statuses are read-only
                             <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${getStatusColor(assignee.status)}`}>
                               {getStatusIcon(assignee.status)}
                               <span className="ml-1 capitalize">{assignee.status.replace('_', ' ')}</span>
@@ -741,11 +838,9 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
                         <li>• <strong>In Progress:</strong> Currently working on the task</li>
                         <li>• <strong>Completed:</strong> Task finished successfully</li>
                       </ul>
-                      {selectedTask.assignees.some(a => a.assigned_to_id === currentUser?.id) && (
-                        <p className="mt-2 text-xs text-blue-600">
-                          You can update your task status using the dropdown above. The task creator will be notified of status changes.
-                        </p>
-                      )}
+                      <p className="mt-2 text-xs text-blue-600">
+                        You can update your task status using the dropdown above. Changes are saved automatically.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -823,9 +918,10 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
           <p className="text-gray-600">Manage and track your tasks</p>
         </div>
         
-        {(canAssignTasks() || currentUser?.role === 'admin') && onCreateTask && (
+        {/* Always show Create Task button if onCreateTask is provided */}
+        {onCreateTask && (
           <Button onClick={onCreateTask} className="flex items-center">
-            <User className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4 mr-2" />
             Create Task
           </Button>
         )}
@@ -878,86 +974,116 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
 
       {/* Task Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTasks.map((task, index) => (
-          <div
-            key={`${task.title}-${index}`}
-            className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 cursor-pointer"
-            onClick={() => fetchTaskDetail(task.title)}
-          >
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">
-                    {task.title}
-                  </h3>
-                  <p className="text-gray-600 text-sm line-clamp-2 mb-3">
-                    {task.description || 'No description provided'}
-                  </p>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2" />
-              </div>
-              
-              <div className="flex items-center justify-between mb-4">
-                <div className={`px-2 py-1 rounded-full border text-xs font-medium flex items-center ${getPriorityColor(task.priority)}`}>
-                  {getPriorityIcon(task.priority)}
-                  <span className="ml-1 capitalize">{task.priority}</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between text-sm text-gray-500">
-                <div className="flex items-center">
-                  <Calendar className="w-4 h-4 mr-1" />
-                  {formatDate(task.created_at)}
-                </div>
-                <div className={`flex items-center ${isOverdue(task.due_date) ? 'text-red-600' : ''}`}>
-                  <Clock className="w-4 h-4 mr-1" />
-                  {formatDate(task.due_date)}
-                  {isOverdue(task.due_date) && <span className="ml-1 font-medium">(Overdue)</span>}
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 pb-4">
-              <div className="flex items-center justify-between">
-                <Button 
-                  variant="secondary" 
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fetchTaskDetail(task.title);
-                  }}
-                  className="flex items-center"
-                >
-                  <Eye className="w-4 h-4 mr-1" />
-                  View Details
-                </Button>
-                
-                {(canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
-                  <div className="flex items-center space-x-1">
-                    <Button 
-                      variant="secondary" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const newTitle = prompt('Enter new title:', task.title);
-                        const newDescription = prompt('Enter new description:', task.description);
-                        
-                        if (newTitle !== null && newDescription !== null) {
-                          handleUpdateTask(task.title, {
-                            title: newTitle.trim() || task.title,
-                            description: newDescription.trim() || task.description
-                          });
-                        }
-                      }}
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </Button>
+        {filteredTasks.map((task, index) => {
+          const userTask = getUserTaskForTitle(task.title);
+          
+          return (
+            <div
+              key={`${task.title}-${index}`}
+              className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 cursor-pointer"
+              onClick={() => fetchTaskDetail(task.title)}
+            >
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">
+                      {task.title}
+                    </h3>
+                    <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                      {task.description || 'No description provided'}
+                    </p>
                   </div>
-                )}
+                  <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2" />
+                </div>
+                
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`px-2 py-1 rounded-full border text-xs font-medium flex items-center ${getPriorityColor(task.priority)}`}>
+                    {getPriorityIcon(task.priority)}
+                    <span className="ml-1 capitalize">{task.priority}</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                  <div className="flex items-center">
+                    <Calendar className="w-4 h-4 mr-1" />
+                    {formatDate(task.created_at)}
+                  </div>
+                  <div className={`flex items-center ${isOverdue(task.due_date) ? 'text-red-600' : ''}`}>
+                    <Clock className="w-4 h-4 mr-1" />
+                    {formatDate(task.due_date)}
+                    {isOverdue(task.due_date) && <span className="ml-1 font-medium">(Overdue)</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 pb-4">
+                <div className="flex items-center justify-between">
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetchTaskDetail(task.title);
+                    }}
+                    className="flex items-center"
+                  >
+                    <Eye className="w-4 h-4 mr-1" />
+                    View Details
+                  </Button>
+                  
+                  <div className="flex items-center space-x-1">
+                    {/* Edit button for task creators and admins */}
+                    {((canAssignTasks() && hasCreatedTasks) || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const newTitle = prompt('Enter new title:', task.title);
+                          const newDescription = prompt('Enter new description:', task.description);
+                          
+                          if (newTitle !== null && newDescription !== null) {
+                            handleUpdateTask(task.title, {
+                              title: newTitle.trim() || task.title,
+                              description: newDescription.trim() || task.description
+                            });
+                          }
+                        }}
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </Button>
+                    )}
+                    
+                    {/* Delete button for task creators and admins */}
+                    {((canAssignTasks() && hasCreatedTasks) || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          
+                          // Get the individual task ID to delete
+                          try {
+                            const individualTasksData = await tasksAPIExtended.getIndividualTasksByTitle(task.title);
+                            if (individualTasksData.length > 0) {
+                              const taskToDelete = individualTasksData[0];
+                              handleDeleteTask(taskToDelete.id);
+                            }
+                          } catch (error) {
+                            showErrorToast('Could not find task to delete');
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {filteredTasks.length === 0 && (
@@ -965,10 +1091,17 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
           <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'No tasks match your search criteria.' : 'You haven\'t created any tasks yet.'}
+            {searchTerm ? 'No tasks match your search criteria.' : 
+             (!hasCreatedTasks && canAssignTasks()) ? 
+             'You will see both your created tasks and assigned tasks here. Create your first task or check if any tasks have been assigned to you.' :
+             'You haven\'t been assigned any tasks yet.'}
           </p>
-          {(canAssignTasks() || currentUser?.role === 'admin') && onCreateTask && (
-            <Button onClick={onCreateTask}>Create Your First Task</Button>
+          {/* Always show Create Task button if onCreateTask is provided */}
+          {onCreateTask && (
+            <Button onClick={onCreateTask} className="flex items-center justify-center">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Your First Task
+            </Button>
           )}
         </div>
       )}

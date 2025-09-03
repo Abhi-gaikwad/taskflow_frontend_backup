@@ -241,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({ onNewTask }) => {
         <div className="flex items-center space-x-2 sm:space-x-4">
 
           {/* New Task Button */}
-          {(user?.role === "admin" || user?.canAssignTasks) &&
+          {(user?.role === "admin" || user?.canAssignTasks || user) &&
             user?.role !== "super_admin" &&
             user?.role !== "company" && (
               <button
