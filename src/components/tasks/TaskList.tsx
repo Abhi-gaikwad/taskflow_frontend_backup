@@ -35,6 +35,25 @@ interface TaskGroupedResponse {
   due_date: string;
 }
 
+interface TaskAnalytics {
+  totals: {
+    total_tasks: number;
+    pending_tasks: number;
+    in_progress_tasks: number;
+    completed_tasks: number;
+    overdue_tasks: number;
+    upcoming_tasks: number;
+  };
+  priority_summary: Record<string, number>;
+  average_completion_time_hours: number;
+  recent_activity: {
+    tasks_created_last_7_days: number;
+    tasks_completed_last_7_days: number;
+  };
+  scope: string;
+  role: string;
+}
+
 interface TaskAssigneeDetails {
   assigned_to_id: number;
   full_name: string;
@@ -81,6 +100,33 @@ interface TaskListProps {
 // Extended API methods for the task operations
 const tasksAPIExtended = {
   ...tasksAPI,
+  
+  getAnalytics: async () => {
+    console.log("[API] Getting task analytics");
+    try {
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
+        ? import.meta.env.VITE_BACKEND_PROD 
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/analytics`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("[API] Retrieved analytics:", data);
+      return data;
+    } catch (error: any) {
+      console.error("[API] Failed to get analytics:", error.message);
+      throw error;
+    }
+  },
   
   getAssignedTasksGrouped: async (params?: any) => {
     console.log("[API] Getting assigned tasks grouped with params:", params);
@@ -240,6 +286,8 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   const [myTasks, setMyTasks] = useState<IndividualTask[]>([]); // Tasks assigned TO current user
   const [createdTasks, setCreatedTasks] = useState<IndividualTask[]>([]); // Tasks created BY current user
   const [hasCreatedTasks, setHasCreatedTasks] = useState(false); // Track if user has created any tasks
+  const [analytics, setAnalytics] = useState<TaskAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -255,6 +303,20 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  // Fetch analytics data
+  const fetchAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+      const analyticsData = await tasksAPIExtended.getAnalytics();
+      setAnalytics(analyticsData);
+    } catch (err: any) {
+      console.error('Error fetching analytics:', err);
+      // Don't set error state for analytics failure, just log it
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
 
   // Helper function to convert individual tasks to grouped format
   const convertToGroupedFormat = (tasks: any[]): TaskGroupedResponse[] => {
@@ -462,6 +524,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
       
       // Refresh the task list and detail view
       fetchTasks();
+      fetchAnalytics(); // Refresh analytics as well
       if (selectedTask) {
         fetchTaskDetail(selectedTask.title);
       }
@@ -481,6 +544,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
       await tasksAPI.updateTaskStatus(taskId, newStatus);
       showSuccessToast(`"${taskTitle}" status updated to ${newStatus.replace('_', ' ')}`);
       fetchTasks(); // Refresh the task list
+      fetchAnalytics(); // Refresh analytics as well
     } catch (err: any) {
       console.error('Error updating task status:', err);
       showErrorToast(err.message || 'Failed to update task status');
@@ -500,6 +564,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
       await tasksAPIExtended.updateTaskByTitle(title, updates);
       showSuccessToast('Task updated successfully');
       fetchTasks(); // Refresh the list
+      fetchAnalytics(); // Refresh analytics
       if (selectedTask && selectedTask.title === title) {
         fetchTaskDetail(title); // Refresh detail view
       }
@@ -517,6 +582,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
       await tasksAPI.deleteTask(taskId);
       showSuccessToast('Task deleted successfully');
       fetchTasks();
+      fetchAnalytics(); // Refresh analytics
       setShowDetail(false);
     } catch (err: any) {
       console.error('Error deleting task:', err);
@@ -617,6 +683,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
 
   useEffect(() => {
     fetchTasks();
+    fetchAnalytics();
   }, [hasCreatedTasks]);
 
   if (loading) {
@@ -926,6 +993,75 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
           </Button>
         )}
       </div>
+
+      {/* Task Analytics */}
+      {!analyticsLoading && analytics && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Overview</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Tasks */}
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-600">Total Tasks</p>
+                  <p className="text-2xl font-bold text-blue-900">{analytics.totals.total_tasks}</p>
+                </div>
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Target className="w-6 h-6 text-blue-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Pending Tasks */}
+            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-yellow-600">Pending Tasks</p>
+                  <p className="text-2xl font-bold text-yellow-900">{analytics.totals.pending_tasks}</p>
+                </div>
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <Clock className="w-6 h-6 text-yellow-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Completed Tasks */}
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-600">Completed Tasks</p>
+                  <p className="text-2xl font-bold text-green-900">{analytics.totals.completed_tasks}</p>
+                </div>
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Overdue Tasks */}
+            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-600">Overdue Tasks</p>
+                  <p className="text-2xl font-bold text-red-900">{analytics.totals.overdue_tasks}</p>
+                </div>
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {analyticsLoading && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <div className="flex items-center justify-center h-24">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-600">Loading analytics...</span>
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="bg-white rounded-lg border p-4">
