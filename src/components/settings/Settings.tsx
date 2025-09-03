@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
-import { User, Phone, Shield, Bell, Palette, Save, Building2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';   // ✅ Added useEffect
+import { User as UserIcon, Phone, Shield, Bell, Palette, Save } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../common/Button';
 
 export const Settings: React.FC = () => {
   const { user, updateUser } = useAuth();
+
   const [formData, setFormData] = useState({
-    full_name: user?.full_name || '',
-    phone_number: user?.phone_number || '',
+    full_name: '',
+    phone_number: '',
     notifications: {
       email: true,
       push: true,
@@ -16,6 +17,34 @@ export const Settings: React.FC = () => {
       reminders: true,
     },
   });
+
+  // 🔹 Update form whenever user changes (handles async user loading)
+  // In your Settings.tsx, update the useEffect where formData is set:
+
+useEffect(() => {
+  if (user) {
+    let displayName = '';
+    
+    if (user.role === 'company') {
+      // For company role users, we need to fetch the company name from the companies API
+      // Since they don't have user.company relationship, but they have company_id
+      displayName = user.full_name || user.username || '';
+    } else {
+      // For other roles, use existing logic
+      displayName = user.full_name || 
+        (user.company?.name || user.username || '');
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      full_name: displayName,
+      phone_number: user.phone_number || '',
+    }));
+  }
+}, [user]);
+
+// However, the better solution is to modify your API response to include company name for company users
+// You'll need to update your backend to return the company name in the user object
 
   const handleSave = () => {
     if (user) {
@@ -71,7 +100,7 @@ export const Settings: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <User className="w-4 h-4 inline mr-1" />
+                  <UserIcon className="w-4 h-4 inline mr-1" />
                   Full Name
                 </label>
                 <input
@@ -79,9 +108,10 @@ export const Settings: React.FC = () => {
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  readOnly={user?.role === 'company'} // optional: company can't edit company name
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <Phone className="w-4 h-4 inline mr-1" />
@@ -117,71 +147,35 @@ export const Settings: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Notification Preferences</h2>
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Bell className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Email Notifications</p>
-                    <p className="text-xs text-gray-500">Receive notifications via email</p>
+              {[
+                { key: 'email', label: 'Email Notifications', desc: 'Receive notifications via email' },
+                { key: 'taskAssigned', label: 'Task Assigned', desc: 'Get notified when tasks are assigned' },
+                { key: 'reminders', label: 'Reminders', desc: 'Get deadline reminders' },
+              ].map((notif) => (
+                <div key={notif.key} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Bell className="w-5 h-5 text-gray-400" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{notif.label}</p>
+                      <p className="text-xs text-gray-500">{notif.desc}</p>
+                    </div>
                   </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.notifications[notif.key as keyof typeof formData.notifications]}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          notifications: { ...formData.notifications, [notif.key]: e.target.checked },
+                        })
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.notifications.email}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      notifications: { ...formData.notifications, email: e.target.checked }
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Bell className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Task Assigned</p>
-                    <p className="text-xs text-gray-500">Get notified when tasks are assigned</p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.notifications.taskAssigned}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      notifications: { ...formData.notifications, taskAssigned: e.target.checked }
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Bell className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Reminders</p>
-                    <p className="text-xs text-gray-500">Get deadline reminders</p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.notifications.reminders}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      notifications: { ...formData.notifications, reminders: e.target.checked }
-                    })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
+              ))}
             </div>
           </div>
         </div>
@@ -191,7 +185,10 @@ export const Settings: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile Picture</h2>
             <div className="text-center">
               <img
-                src={user?.avatar_url || `https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=400`}
+                src={
+                  user?.avatar_url ||
+                  `https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=400`
+                }
                 alt="Profile"
                 className="w-24 h-24 rounded-full mx-auto mb-4 object-cover"
               />

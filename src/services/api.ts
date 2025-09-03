@@ -723,7 +723,7 @@ export const notificationsAPI = {
       throw new Error(handleApiError(error));
     }
   },
-
+  
   markAsRead: async (notificationId: number) => {
     console.log("[API] Marking notification as read:", notificationId);
 
