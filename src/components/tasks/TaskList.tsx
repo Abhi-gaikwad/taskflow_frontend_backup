@@ -304,6 +304,12 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
+    // Add these new filter states after the existing ones
+  const [taskTypeFilter, setTaskTypeFilter] = useState<string>('all'); // 'all', 'single', 'group'
+  const [scopeFilter, setScopeFilter] = useState<string>('all'); // 'all', 'total', 'assigned', 'my'
+
+
+
   // Fetch analytics data
   const fetchAnalytics = async () => {
     try {
@@ -353,91 +359,141 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   };
 
   // Fetch grouped tasks - FIXED VERSION
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Determine which endpoint to call based on user permissions
-      let tasksData: TaskGroupedResponse[] = [];
-      let myTasksData: IndividualTask[] = [];
-      
-      if (currentUser?.role === 'super_admin') {
-        // Super admin can see all tasks across all companies
-        tasksData = await tasksAPIExtended.getAllTasksGrouped();
-        setHasCreatedTasks(true); // Super admin can always see all tasks
-      } else if (currentUser?.role === 'admin' || currentUser?.role === 'company') {
-        // Admin/Company can see all tasks in their company
-        tasksData = await tasksAPIExtended.getAllTasksGrouped();
-        setHasCreatedTasks(true); // Admin can always see all tasks in their company
-      } else if (canAssignTasks()) {
-        // User with task creation permission - FIXED LOGIC
-        await checkUserCreatedTasks();
-        
-        // Always fetch user's assigned tasks first
+  // src/components/tasks/TaskList.tsx
+
+// ... (existing imports and interfaces)
+
+// Fetch grouped tasks - FIXED VERSION
+const fetchTasks = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    // 🆕 Create the params object for the API call
+    const params: Record<string, any> = {};
+
+    if (statusFilter && statusFilter !== 'all') {
+      params.status = statusFilter;
+    }
+    if (searchTerm) {
+      params.search = searchTerm;
+    }
+    // Note: The backend doesn't support 'priority' filtering directly on grouped tasks
+    // so we'll handle this on the frontend for now, as it was previously.
+
+    // Determine which endpoint to call based on user permissions
+    let tasksData: TaskGroupedResponse[] = [];
+    let myTasksData: IndividualTask[] = [];
+
+    if (currentUser?.role === 'super_admin') {
+      // Super admin can see all tasks across all companies
+      // 🆕 Pass the params object to the API call
+      tasksData = await tasksAPIExtended.getAllTasksGrouped(params);
+      setHasCreatedTasks(true); // Super admin can always see all tasks
+    } else if (currentUser?.role === 'admin' || currentUser?.role === 'company') {
+      // Admin/Company can see all tasks in their company
+      // 🆕 Pass the params object to the API call
+      tasksData = await tasksAPIExtended.getAllTasksGrouped(params);
+      setHasCreatedTasks(true); // Admin can always see all tasks in their company
+    } else if (canAssignTasks()) {
+      // User with task creation permission - FIXED LOGIC
+      await checkUserCreatedTasks();
+
+      // Always fetch user's assigned tasks first
+      try {
+        // 🆕 Pass the search params to the my-tasks API
+        myTasksData = await tasksAPI.getMyTasks(searchTerm ? { search: searchTerm } : {});
+      } catch (error) {
+        console.warn('Could not fetch assigned tasks:', error);
+      }
+
+      if (hasCreatedTasks) {
+        // If user has created tasks, show combined view: tasks they created + tasks assigned to them
         try {
-          myTasksData = await tasksAPI.getMyTasks();
+          // 🆕 Pass the params object to the API call
+          const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped(params);
+
+          // Combine created tasks and assigned tasks, removing duplicates
+          const allTaskTitles = new Set();
+          const combinedGroupedTasks: TaskGroupedResponse[] = [];
+
+          // Add created tasks
+          createdTasksData.forEach(task => {
+            const key = `${task.title}-${task.priority}-${task.due_date}`;
+            if (!allTaskTitles.has(key)) {
+              allTaskTitles.add(key);
+              combinedGroupedTasks.push(task);
+            }
+          });
+
+          // Add assigned tasks (converted to grouped format) that aren't already included
+          const assignedGrouped = convertToGroupedFormat(myTasksData);
+          assignedGrouped.forEach(task => {
+            const key = `${task.title}-${task.priority}-${task.due_date}`;
+            if (!allTaskTitles.has(key)) {
+              allTaskTitles.add(key);
+              combinedGroupedTasks.push(task);
+            }
+          });
+
+          tasksData = combinedGroupedTasks;
         } catch (error) {
-          console.warn('Could not fetch assigned tasks:', error);
-        }
-        
-        if (hasCreatedTasks) {
-          // If user has created tasks, show combined view: tasks they created + tasks assigned to them
-          try {
-            const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped();
-            
-            // Combine created tasks and assigned tasks, removing duplicates
-            const allTaskTitles = new Set();
-            const combinedGroupedTasks: TaskGroupedResponse[] = [];
-            
-            // Add created tasks
-            createdTasksData.forEach(task => {
-              const key = `${task.title}-${task.priority}-${task.due_date}`;
-              if (!allTaskTitles.has(key)) {
-                allTaskTitles.add(key);
-                combinedGroupedTasks.push(task);
-              }
-            });
-            
-            // Add assigned tasks (converted to grouped format) that aren't already included
-            const assignedGrouped = convertToGroupedFormat(myTasksData);
-            assignedGrouped.forEach(task => {
-              const key = `${task.title}-${task.priority}-${task.due_date}`;
-              if (!allTaskTitles.has(key)) {
-                allTaskTitles.add(key);
-                combinedGroupedTasks.push(task);
-              }
-            });
-            
-            tasksData = combinedGroupedTasks;
-          } catch (error) {
-            console.warn('Could not fetch created tasks, showing only assigned tasks:', error);
-            tasksData = convertToGroupedFormat(myTasksData);
-          }
-        } else {
-          // If user hasn't created any tasks yet, show only their assigned tasks
+          console.warn('Could not fetch created tasks, showing only assigned tasks:', error);
           tasksData = convertToGroupedFormat(myTasksData);
         }
       } else {
-        // For regular users without task creation permission, only show tasks assigned TO them
-        try {
-          myTasksData = await tasksAPI.getMyTasks();
-          tasksData = convertToGroupedFormat(myTasksData);
-        } catch (error) {
-          console.warn('Could not fetch assigned tasks:', error);
-        }
+        // If user hasn't created any tasks yet, show only their assigned tasks
+        tasksData = convertToGroupedFormat(myTasksData);
       }
-      
-      setTasks(tasksData);
-      setMyTasks(myTasksData);
-    } catch (err: any) {
-      console.error('Error fetching tasks:', err);
-      setError(err.message || 'Failed to fetch tasks');
-    } finally {
-      setLoading(false);
+    } else {
+      // For regular users without task creation permission, only show tasks assigned TO them
+      try {
+        // 🆕 Pass the search params to the my-tasks API
+        myTasksData = await tasksAPI.getMyTasks(searchTerm ? { search: searchTerm } : {});
+        tasksData = convertToGroupedFormat(myTasksData);
+      } catch (error) {
+        console.warn('Could not fetch assigned tasks:', error);
+      }
     }
-  };
+    try {
+      const allIndividualTasks = await tasksAPI.getMyTasks({ limit: 1000 });
+      setIndividualTasks(allIndividualTasks);
+    } catch (error) {
+      console.warn("Could not fetch individual tasks:", error);
+      }
+    setTasks(tasksData);
+    setMyTasks(myTasksData);
 
+    const createdByMe = myTasksData.filter((t) => t.created_by === currentUser?.id);
+    setCreatedTasks(createdByMe);
+    try {
+      const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped();
+      setCreatedTasks(
+        createdTasksData.flatMap((grouped: any) => {
+          return (grouped.assignees || []).map((assignee: any) => ({
+            id: assignee.task_id || 0,
+            title: grouped.title,
+            description: grouped.description,
+            status: assignee.status || 'pending',
+            priority: grouped.priority,
+            assigned_to_id: assignee.assigned_to_id,
+            created_by: grouped.created_by, // relies on backend sending this
+            company_id: 0,
+            created_at: grouped.created_at,
+            due_date: grouped.due_date,
+          }));
+        })
+      );
+    } catch (error) {
+      console.warn('Could not fetch created tasks:', error);
+    }
+  } catch (err: any) {
+    console.error('Error fetching tasks:', err);
+    setError(err.message || 'Failed to fetch tasks');
+  } finally {
+    setLoading(false);
+  }
+};
   // Fetch task details with individual task data for status updates
   const fetchTaskDetail = async (title: string) => {
     try {
@@ -657,15 +713,62 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
     }
   };
 
-  // Filter tasks
-  const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         task.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
-    
-    return matchesSearch && matchesPriority;
-  });
+const search = searchTerm.toLowerCase();
+
+const filteredTasks = tasks.filter((task) => {
+  const title = task.title?.toLowerCase() || "";
+  const description = task.description?.toLowerCase() || "";
+
+  // 🔹 Search filter
+  const matchesSearch =
+    title.includes(search) || description.includes(search);
+
+  // 🔹 Priority filter
+  const matchesPriority =
+    priorityFilter === "all" || task.priority === priorityFilter;
+
+  // 🔹 Related individuals
+  const relatedIndividuals = individualTasks.filter(
+    (t) => t.title === task.title
+  );
+
+  // 🔹 Task type filter
+  const totalAssignees = relatedIndividuals.length;
+  const matchesTaskType =
+    taskTypeFilter === "all" ||
+    (taskTypeFilter === "single" && totalAssignees === 1) ||
+    (taskTypeFilter === "group" && totalAssignees > 1);
+
+  // 🔹 Scope filter
+  const matchesScope =
+    scopeFilter === "all"
+      ? true
+      : scopeFilter === "assigned"
+      ? relatedIndividuals.some((t) => t.assigned_to_id === currentUser?.id)
+      : true;
+
+  // 🔹 Status filter (matches backend enums)
+  const matchesStatus =
+    statusFilter === "all" || task.status === statusFilter;
+  console.log("Task status from backend:", tasks.map(t => t.status));
+  return (
+    matchesSearch &&
+    matchesPriority &&
+    matchesTaskType &&
+    matchesScope &&
+    matchesStatus
+  );
+});
+
+
+
+
+
+
+
+
+
+  
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -1088,24 +1191,59 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
           </Button>
         </div>
 
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t flex items-center space-x-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Priorities</option>
-                <option value="urgent">Urgent</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-          </div>
-        )}
+       {showFilters && (
+  <div className="mt-4 pt-4 border-t flex items-center space-x-6">
+    {/* Priority Filter */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Priority
+      </label>
+      <select
+        value={priorityFilter}
+        onChange={(e) => setPriorityFilter(e.target.value)}
+        className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="all">All Priorities</option>
+        <option value="urgent">Urgent</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+
+    {/* Scope Filter */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        Scope
+      </label>
+      <select
+        value={scopeFilter}
+        onChange={(e) => setScopeFilter(e.target.value)}
+        className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="all">All</option>
+        <option value="assigned">Assigned to Me</option>
+      </select>
+    </div>
+
+    {/* Status Filter */}
+    <div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Task Status
+  </label>
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  >
+<option value="all">All Tasks</option>
+<option value="pending">Pending Tasks</option>
+<option value="in_progress">In Progress Tasks</option>
+<option value="completed">Completed Tasks</option>
+  </select>
+</div>
+  </div>
+)}
       </div>
 
       {/* Task Cards */}
@@ -1241,6 +1379,8 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
           )}
         </div>
       )}
+
+      
 
       {showToast && (
         <Toast
