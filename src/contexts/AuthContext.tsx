@@ -83,21 +83,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     token: localStorage.getItem('access_token'),
   });
 
+  // 🔧 FIXED: Better error handling in refreshUser
   const refreshUser = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      console.log('[AUTH] No token found, cannot refresh user');
+      setAuthState({ user: null, isAuthenticated: false, isLoading: false, token: null });
+      return;
+    }
+
     try {
+      console.log('[AUTH] Refreshing user data...');
       const currentUserFromAPI: UserResponse = await authAPI.getCurrentUser();
       const updatedUser = transformBackendUser(currentUserFromAPI);
       
+      console.log('[AUTH] User refreshed successfully:', updatedUser.role);
       localStorage.setItem('auth', JSON.stringify(updatedUser));
       setAuthState(prev => ({ 
         ...prev, 
         user: updatedUser, 
         isAuthenticated: true, 
         isLoading: false, 
-        token: localStorage.getItem('access_token')
+        token
       }));
     } catch (error) {
-      console.error('Failed to refresh user, logging out.', error);
+      console.error('[AUTH] Failed to refresh user:', error);
+      
+      // 🔧 FIXED: Don't automatically logout on refresh failure
+      // Instead, try to use saved auth data
+      const savedAuth = localStorage.getItem('auth');
+      if (savedAuth) {
+        try {
+          const authData = JSON.parse(savedAuth);
+          console.log('[AUTH] Using saved auth data as fallback');
+          setAuthState(prev => ({ 
+            ...prev, 
+            user: authData, 
+            isAuthenticated: true, 
+            isLoading: false, 
+            token
+          }));
+          return;
+        } catch (parseError) {
+          console.error('[AUTH] Failed to parse saved auth data:', parseError);
+        }
+      }
+      
+      // Only logout if we really can't recover
+      console.log('[AUTH] Cannot recover auth state, logging out');
       localStorage.removeItem('auth');
       localStorage.removeItem('access_token');
       setAuthState({ user: null, isAuthenticated: false, isLoading: false, token: null });
@@ -107,6 +140,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
+      console.log('[AUTH] Initializing auth...');
       const token = localStorage.getItem('access_token');
       const savedAuth = localStorage.getItem('auth');
       
@@ -114,13 +148,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (savedAuth) {
           try {
             const authData = JSON.parse(savedAuth);
+            console.log('[AUTH] Found saved auth data for role:', authData.role);
             setAuthState(prev => ({ 
               ...prev, 
-              user: authData.user || null, 
+              user: authData, 
               isAuthenticated: true, 
+              isLoading: false,
               token 
             }));
-            await refreshUser(); 
+            
+            // 🔧 FIXED: Only refresh if not company user or if refresh is critical
+            // Company users might not have access to getCurrentUser endpoint
+            if (authData.role !== 'company') {
+              console.log('[AUTH] Refreshing user data for non-company user');
+              await refreshUser(); 
+            } else {
+              console.log('[AUTH] Skipping refresh for company user');
+            }
           } catch (error) {
             console.error('[AuthContext] Error parsing saved auth data:', error);
             localStorage.removeItem('auth');
@@ -128,9 +172,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setAuthState({ user: null, isAuthenticated: false, isLoading: false, token: null });
           }
         } else {
+          console.log('[AUTH] No saved auth, refreshing...');
           await refreshUser();
         }
       } else {
+        console.log('[AUTH] No token found');
         setAuthState({ user: null, isAuthenticated: false, isLoading: false, token: null });
       }
     };
@@ -139,20 +185,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const commonLoginLogic = useCallback((accessToken: string, userData: UserResponse) => {
     const user = transformBackendUser(userData);
+    console.log('[AUTH] Setting auth state for user:', user.role);
     localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('auth', JSON.stringify({ ...userData, user }));
+    localStorage.setItem('auth', JSON.stringify(user));
     setAuthState({ user, isAuthenticated: true, isLoading: false, token: accessToken });
   }, []);
 
   // Updated login function for mobile-based authentication
   const login = async (mobile: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    console.log('[AUTH] Regular login attempt for:', mobile);
     setAuthState(prev => ({ ...prev, isLoading: true }));
     try {
       const response = await authAPI.login(mobile, password);
       commonLoginLogic(response.access_token, response.user);
-      await refreshUser();
+      
+      // 🔧 FIXED: Only refresh for non-company users
+      if (response.user.role !== 'company') {
+        await refreshUser();
+      }
       return { success: true };
     } catch (error: any) {
+      console.error('[AUTH] Login failed:', error);
       const errorMessage = handleApiError(error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: false, error: errorMessage };
@@ -164,16 +217,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     mobile: string,
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
+    console.log('[AUTH] Company login attempt for:', mobile);
     setAuthState(prev => ({ ...prev, isLoading: true }));
     try {
       const response = await authAPI.companyLogin(mobile, password);
       if (!response.access_token || !response.user) {
         throw new Error('Invalid response from server - missing token or user data');
       }
+      
+      console.log('[AUTH] Company login successful, user role:', response.user.role);
       commonLoginLogic(response.access_token, response.user);
-      await refreshUser();
+      
+      // 🔧 FIXED: Don't refresh user data for company login
+      // Company users might not have access to getCurrentUser endpoint
+      console.log('[AUTH] Skipping user refresh for company login');
+      
       return { success: true };
     } catch (error: any) {
+      console.error('[AUTH] Company login failed:', error);
       const errorMessage = handleApiError(error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: false, error: errorMessage };
@@ -200,7 +261,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.access_token && response.user) {
         console.log('[AUTH] Smart login successful, user role:', response.user?.role);
         commonLoginLogic(response.access_token, response.user);
-        await refreshUser();
+        
+        // 🔧 FIXED: Only refresh for non-company users
+        if (response.user.role !== 'company') {
+          await refreshUser();
+        }
         return { success: true };
       }
       
@@ -216,6 +281,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    console.log('[AUTH] Logging out user');
     localStorage.removeItem('auth');
     localStorage.removeItem('access_token');
     setAuthState({ user: null, isAuthenticated: false, isLoading: false, token: null });

@@ -1,13 +1,13 @@
 // src/components/tasks/TaskList.tsx
 
 import { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  User, 
-  AlertCircle, 
-  Clock, 
-  CheckCircle, 
-  Play, 
+import {
+  Calendar,
+  User,
+  AlertCircle,
+  Clock,
+  CheckCircle,
+  Play,
   Pause,
   Eye,
   Edit3,
@@ -100,12 +100,12 @@ interface TaskListProps {
 // Extended API methods for the task operations
 const tasksAPIExtended = {
   ...tasksAPI,
-  
+
   getAnalytics: async () => {
     console.log("[API] Getting task analytics");
     try {
-      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
-        ? import.meta.env.VITE_BACKEND_PROD 
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION"
+        ? import.meta.env.VITE_BACKEND_PROD
         : import.meta.env.VITE_BACKEND_DEV}/api/v1/analytics`, {
         method: 'GET',
         headers: {
@@ -113,12 +113,12 @@ const tasksAPIExtended = {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("[API] Retrieved analytics:", data);
       return data;
@@ -127,15 +127,15 @@ const tasksAPIExtended = {
       throw error;
     }
   },
-  
+
   getAssignedTasksGrouped: async (params?: any) => {
     console.log("[API] Getting assigned tasks grouped with params:", params);
     try {
       const queryString = params ? new URLSearchParams(params).toString() : '';
-      const url = `${import.meta.env.VITE_ENV == "PRODUCTION" 
-        ? import.meta.env.VITE_BACKEND_PROD 
+      const url = `${import.meta.env.VITE_ENV == "PRODUCTION"
+        ? import.meta.env.VITE_BACKEND_PROD
         : import.meta.env.VITE_BACKEND_DEV}/api/v1/tasks-assigned${queryString ? '?' + queryString : ''}`;
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -143,12 +143,12 @@ const tasksAPIExtended = {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("[API] Retrieved assigned tasks grouped:", data.length);
       return data;
@@ -162,10 +162,10 @@ const tasksAPIExtended = {
     console.log("[API] Getting all tasks grouped with params:", params);
     try {
       const queryString = params ? new URLSearchParams(params).toString() : '';
-      const url = `${import.meta.env.VITE_ENV == "PRODUCTION" 
-        ? import.meta.env.VITE_BACKEND_PROD 
+      const url = `${import.meta.env.VITE_ENV == "PRODUCTION"
+        ? import.meta.env.VITE_BACKEND_PROD
         : import.meta.env.VITE_BACKEND_DEV}/api/v1/tasks/all${queryString ? '?' + queryString : ''}`;
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -173,12 +173,12 @@ const tasksAPIExtended = {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("[API] Retrieved all tasks grouped:", data.length);
       return data;
@@ -192,8 +192,8 @@ const tasksAPIExtended = {
     console.log("[API] Getting task details for title:", title);
     try {
       const queryParams = new URLSearchParams({ title, ...params });
-      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
-        ? import.meta.env.VITE_BACKEND_PROD 
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION"
+        ? import.meta.env.VITE_BACKEND_PROD
         : import.meta.env.VITE_BACKEND_DEV}/api/v1/task-details?${queryParams}`, {
         method: 'GET',
         headers: {
@@ -201,12 +201,12 @@ const tasksAPIExtended = {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("[API] Retrieved task details for:", title);
       return data;
@@ -221,21 +221,21 @@ const tasksAPIExtended = {
     console.log("[API] Getting individual tasks by title:", title);
     try {
       // Use the my-tasks endpoint with search parameter
-      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
-        ? import.meta.env.VITE_BACKEND_PROD 
-        : import.meta.env.VITE_BACKEND_DEV}/api/v1/my-tasks?search=${encodeURIComponent(title)}&limit=1000`, {
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION"
+        ? import.meta.env.VITE_BACKEND_PROD
+        : import.meta.env.VITE_BACKEND_DEV}/api/v1/my-tasks?search=${encodeURIComponent(title)}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       // Filter to exact title match
       const exactMatches = data.filter((task: IndividualTask) => task.title === title);
@@ -250,8 +250,8 @@ const tasksAPIExtended = {
   updateTaskByTitle: async (title: string, updates: any) => {
     console.log("[API] Updating task by title:", title, "with updates:", updates);
     try {
-      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION" 
-        ? import.meta.env.VITE_BACKEND_PROD 
+      const response = await fetch(`${import.meta.env.VITE_ENV == "PRODUCTION"
+        ? import.meta.env.VITE_BACKEND_PROD
         : import.meta.env.VITE_BACKEND_DEV}/api/v1/tasks/by-title?title=${encodeURIComponent(title)}`, {
         method: 'PUT',
         headers: {
@@ -260,12 +260,12 @@ const tasksAPIExtended = {
         },
         body: JSON.stringify(updates)
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("[API] Task updated by title successfully");
       return data;
@@ -278,7 +278,7 @@ const tasksAPIExtended = {
 
 export const TaskList = ({ onCreateTask }: TaskListProps) => {
   const { user: currentUser, canAssignTasks } = useAuth();
-  
+
   // State management
   const [tasks, setTasks] = useState<TaskGroupedResponse[]>([]);
   const [selectedTask, setSelectedTask] = useState<TaskDetailResponse | null>(null);
@@ -292,23 +292,21 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
-  
+
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
-  
+  const [taskTypeFilter, setTaskTypeFilter] = useState<string>('all'); // 'all', 'single', 'group'
+  const [scopeFilter, setScopeFilter] = useState<string>('all'); // 'all', 'total', 'assigned', 'my'
+
   // Toast state
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
-
-    // Add these new filter states after the existing ones
-  const [taskTypeFilter, setTaskTypeFilter] = useState<string>('all'); // 'all', 'single', 'group'
-  const [scopeFilter, setScopeFilter] = useState<string>('all'); // 'all', 'total', 'assigned', 'my'
-
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 5; 
 
   // Fetch analytics data
   const fetchAnalytics = async () => {
@@ -327,7 +325,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
   // Helper function to convert individual tasks to grouped format
   const convertToGroupedFormat = (tasks: any[]): TaskGroupedResponse[] => {
     const grouped = new Map();
-    
+
     tasks.forEach(task => {
       const key = `${task.title}-${task.description}-${task.priority}-${task.created_at?.split('T')[0]}-${task.due_date?.split('T')[0]}`;
       if (!grouped.has(key)) {
@@ -340,7 +338,7 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
         });
       }
     });
-    
+
     return Array.from(grouped.values());
   };
 
@@ -358,157 +356,133 @@ export const TaskList = ({ onCreateTask }: TaskListProps) => {
     }
   };
 
-  // Fetch grouped tasks - FIXED VERSION
-  // src/components/tasks/TaskList.tsx
+  // Fetch grouped tasks
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-// ... (existing imports and interfaces)
+      const params: Record<string, any> = {};
 
-// Fetch grouped tasks - FIXED VERSION
-const fetchTasks = async () => {
-  try {
-    setLoading(true);
-    setError(null);
-
-    // 🆕 Create the params object for the API call
-    const params: Record<string, any> = {};
-
-    if (statusFilter && statusFilter !== 'all') {
-      params.status = statusFilter;
-    }
-    if (searchTerm) {
-      params.search = searchTerm;
-    }
-    // Note: The backend doesn't support 'priority' filtering directly on grouped tasks
-    // so we'll handle this on the frontend for now, as it was previously.
-
-    // Determine which endpoint to call based on user permissions
-    let tasksData: TaskGroupedResponse[] = [];
-    let myTasksData: IndividualTask[] = [];
-
-    if (currentUser?.role === 'super_admin') {
-      // Super admin can see all tasks across all companies
-      // 🆕 Pass the params object to the API call
-      tasksData = await tasksAPIExtended.getAllTasksGrouped(params);
-      setHasCreatedTasks(true); // Super admin can always see all tasks
-    } else if (currentUser?.role === 'admin' || currentUser?.role === 'company') {
-      // Admin/Company can see all tasks in their company
-      // 🆕 Pass the params object to the API call
-      tasksData = await tasksAPIExtended.getAllTasksGrouped(params);
-      setHasCreatedTasks(true); // Admin can always see all tasks in their company
-    } else if (canAssignTasks()) {
-      // User with task creation permission - FIXED LOGIC
-      await checkUserCreatedTasks();
-
-      // Always fetch user's assigned tasks first
-      try {
-        // 🆕 Pass the search params to the my-tasks API
-        myTasksData = await tasksAPI.getMyTasks(searchTerm ? { search: searchTerm } : {});
-      } catch (error) {
-        console.warn('Could not fetch assigned tasks:', error);
+      if (statusFilter && statusFilter !== 'all') {
+        params.status = statusFilter;
+      }
+      if (searchTerm) {
+        params.search = searchTerm;
       }
 
-      if (hasCreatedTasks) {
-        // If user has created tasks, show combined view: tasks they created + tasks assigned to them
+      let tasksData: TaskGroupedResponse[] = [];
+      let myTasksData: IndividualTask[] = [];
+
+      if (currentUser?.role === 'super_admin') {
+        tasksData = await tasksAPIExtended.getAllTasksGrouped(params);
+        setHasCreatedTasks(true);
+      } else if (currentUser?.role === 'admin' || currentUser?.role === 'company') {
+        tasksData = await tasksAPIExtended.getAllTasksGrouped(params);
+        setHasCreatedTasks(true);
+      } else if (canAssignTasks()) {
+        await checkUserCreatedTasks();
+
         try {
-          // 🆕 Pass the params object to the API call
-          const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped(params);
-
-          // Combine created tasks and assigned tasks, removing duplicates
-          const allTaskTitles = new Set();
-          const combinedGroupedTasks: TaskGroupedResponse[] = [];
-
-          // Add created tasks
-          createdTasksData.forEach(task => {
-            const key = `${task.title}-${task.priority}-${task.due_date}`;
-            if (!allTaskTitles.has(key)) {
-              allTaskTitles.add(key);
-              combinedGroupedTasks.push(task);
-            }
-          });
-
-          // Add assigned tasks (converted to grouped format) that aren't already included
-          const assignedGrouped = convertToGroupedFormat(myTasksData);
-          assignedGrouped.forEach(task => {
-            const key = `${task.title}-${task.priority}-${task.due_date}`;
-            if (!allTaskTitles.has(key)) {
-              allTaskTitles.add(key);
-              combinedGroupedTasks.push(task);
-            }
-          });
-
-          tasksData = combinedGroupedTasks;
+          myTasksData = await tasksAPI.getMyTasks({ search: searchTerm });
         } catch (error) {
-          console.warn('Could not fetch created tasks, showing only assigned tasks:', error);
+          console.warn('Could not fetch assigned tasks:', error);
+        }
+
+        if (hasCreatedTasks) {
+          try {
+            const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped(params);
+
+            const allTaskTitles = new Set();
+            const combinedGroupedTasks: TaskGroupedResponse[] = [];
+
+            createdTasksData.forEach(task => {
+              const key = `${task.title}-${task.priority}-${task.due_date}`;
+              if (!allTaskTitles.has(key)) {
+                allTaskTitles.add(key);
+                combinedGroupedTasks.push(task);
+              }
+            });
+
+            const assignedGrouped = convertToGroupedFormat(myTasksData);
+            assignedGrouped.forEach(task => {
+              const key = `${task.title}-${task.priority}-${task.due_date}`;
+              if (!allTaskTitles.has(key)) {
+                allTaskTitles.add(key);
+                combinedGroupedTasks.push(task);
+              }
+            });
+            tasksData = combinedGroupedTasks;
+          } catch (error) {
+            console.warn('Could not fetch created tasks, showing only assigned tasks:', error);
+            tasksData = convertToGroupedFormat(myTasksData);
+          }
+        } else {
           tasksData = convertToGroupedFormat(myTasksData);
         }
       } else {
-        // If user hasn't created any tasks yet, show only their assigned tasks
-        tasksData = convertToGroupedFormat(myTasksData);
+        try {
+          myTasksData = await tasksAPI.getMyTasks({ search: searchTerm });
+          tasksData = convertToGroupedFormat(myTasksData);
+        } catch (error) {
+          console.warn('Could not fetch assigned tasks:', error);
+        }
       }
-    } else {
-      // For regular users without task creation permission, only show tasks assigned TO them
-      try {
-        // 🆕 Pass the search params to the my-tasks API
-        myTasksData = await tasksAPI.getMyTasks(searchTerm ? { search: searchTerm } : {});
-        tasksData = convertToGroupedFormat(myTasksData);
-      } catch (error) {
-        console.warn('Could not fetch assigned tasks:', error);
-      }
-    }
-    try {
-      const allIndividualTasks = await tasksAPI.getMyTasks({ limit: 1000 });
-      setIndividualTasks(allIndividualTasks);
-    } catch (error) {
-      console.warn("Could not fetch individual tasks:", error);
-      }
-    setTasks(tasksData);
-    setMyTasks(myTasksData);
 
-    const createdByMe = myTasksData.filter((t) => t.created_by === currentUser?.id);
-    setCreatedTasks(createdByMe);
-    try {
-      const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped();
-      setCreatedTasks(
-        createdTasksData.flatMap((grouped: any) => {
-          return (grouped.assignees || []).map((assignee: any) => ({
-            id: assignee.task_id || 0,
-            title: grouped.title,
-            description: grouped.description,
-            status: assignee.status || 'pending',
-            priority: grouped.priority,
-            assigned_to_id: assignee.assigned_to_id,
-            created_by: grouped.created_by, // relies on backend sending this
-            company_id: 0,
-            created_at: grouped.created_at,
-            due_date: grouped.due_date,
-          }));
-        })
-      );
-    } catch (error) {
-      console.warn('Could not fetch created tasks:', error);
+      try {
+        const allIndividualTasks = await tasksAPI.getMyTasks({ search: searchTerm });
+        setIndividualTasks(allIndividualTasks);
+      } catch (error) {
+        console.warn("Could not fetch individual tasks:", error);
+      }
+
+      setTasks(tasksData);
+      setMyTasks(myTasksData);
+
+      const createdByMe = myTasksData.filter((t) => t.created_by === currentUser?.id);
+      setCreatedTasks(createdByMe);
+      try {
+        const createdTasksData = await tasksAPIExtended.getAssignedTasksGrouped();
+        setCreatedTasks(
+          createdTasksData.flatMap((grouped: any) => {
+            return (grouped.assignees || []).map((assignee: any) => ({
+              id: assignee.task_id || 0,
+              title: grouped.title,
+              description: grouped.description,
+              status: assignee.status || 'pending',
+              priority: grouped.priority,
+              assigned_to_id: assignee.assigned_to_id,
+              created_by: grouped.created_by,
+              company_id: 0,
+              created_at: grouped.created_at,
+              due_date: grouped.due_date,
+            }));
+          })
+        );
+      } catch (error) {
+        console.warn('Could not fetch created tasks:', error);
+      }
+    } catch (err: any) {
+      console.error('Error fetching tasks:', err);
+      setError(err.message || 'Failed to fetch tasks');
+    } finally {
+      setLoading(false);
     }
-  } catch (err: any) {
-    console.error('Error fetching tasks:', err);
-    setError(err.message || 'Failed to fetch tasks');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   // Fetch task details with individual task data for status updates
   const fetchTaskDetail = async (title: string) => {
     try {
       setDetailLoading(true);
-      
-      // For regular users without created tasks, build detail view from individual tasks data only
+
       if (currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin' && (!canAssignTasks() || !hasCreatedTasks)) {
         const individualTasksData = await tasksAPIExtended.getIndividualTasksByTitle(title);
         const userTask = individualTasksData.find(task => task.assigned_to_id === currentUser?.id);
-        
+
         if (!userTask) {
           throw new Error('Task not found or not assigned to you');
         }
-        
-        // Build detail response from individual task data
+
         const mockDetail: TaskDetailResponse = {
           title: userTask.title,
           description: userTask.description,
@@ -529,18 +503,16 @@ const fetchTasks = async () => {
             pending: userTask.status === 'pending' ? 1 : 0,
           }
         };
-        
+
         setSelectedTask(mockDetail);
         setIndividualTasks([userTask]);
         setShowDetail(true);
       } else {
-        // For admins and users who have created tasks, use the original logic with full task details
         const [detail, individualTasksData] = await Promise.all([
           tasksAPIExtended.getTaskDetails(title),
           tasksAPIExtended.getIndividualTasksByTitle(title)
         ]);
-        
-        // Enhance assignees with task IDs from individual tasks
+
         const enhancedAssignees = detail.assignees.map((assignee: TaskAssigneeDetails) => {
           const individualTask = individualTasksData.find(
             (task: IndividualTask) => task.assigned_to_id === assignee.assigned_to_id
@@ -550,12 +522,12 @@ const fetchTasks = async () => {
             task_id: individualTask?.id
           };
         });
-        
+
         const enhancedDetail = {
           ...detail,
           assignees: enhancedAssignees
         };
-        
+
         setSelectedTask(enhancedDetail);
         setIndividualTasks(individualTasksData);
         setShowDetail(true);
@@ -574,13 +546,10 @@ const fetchTasks = async () => {
     newStatus: 'pending' | 'in_progress' | 'completed'
   ) => {
     try {
-      // Update the status using the correct task ID and API endpoint
       await tasksAPI.updateTaskStatus(taskId, newStatus);
       showSuccessToast(`Task status updated to ${newStatus.replace('_', ' ')}`);
-      
-      // Refresh the task list and detail view
       fetchTasks();
-      fetchAnalytics(); // Refresh analytics as well
+      fetchAnalytics();
       if (selectedTask) {
         fetchTaskDetail(selectedTask.title);
       }
@@ -599,8 +568,8 @@ const fetchTasks = async () => {
     try {
       await tasksAPI.updateTaskStatus(taskId, newStatus);
       showSuccessToast(`"${taskTitle}" status updated to ${newStatus.replace('_', ' ')}`);
-      fetchTasks(); // Refresh the task list
-      fetchAnalytics(); // Refresh analytics as well
+      fetchTasks();
+      fetchAnalytics();
     } catch (err: any) {
       console.error('Error updating task status:', err);
       showErrorToast(err.message || 'Failed to update task status');
@@ -609,7 +578,7 @@ const fetchTasks = async () => {
 
   // Check if current user has this task assigned to them
   const getUserTaskForTitle = (taskTitle: string): IndividualTask | null => {
-    return myTasks.find(task => 
+    return myTasks.find(task =>
       task.title === taskTitle && task.assigned_to_id === currentUser?.id
     ) || null;
   };
@@ -619,10 +588,10 @@ const fetchTasks = async () => {
     try {
       await tasksAPIExtended.updateTaskByTitle(title, updates);
       showSuccessToast('Task updated successfully');
-      fetchTasks(); // Refresh the list
-      fetchAnalytics(); // Refresh analytics
+      fetchTasks();
+      fetchAnalytics();
       if (selectedTask && selectedTask.title === title) {
-        fetchTaskDetail(title); // Refresh detail view
+        fetchTaskDetail(title);
       }
     } catch (err: any) {
       console.error('Error updating task:', err);
@@ -633,12 +602,12 @@ const fetchTasks = async () => {
   // Delete task - Updated permissions
   const handleDeleteTask = async (taskId: number) => {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
-    
+
     try {
       await tasksAPI.deleteTask(taskId);
       showSuccessToast('Task deleted successfully');
       fetchTasks();
-      fetchAnalytics(); // Refresh analytics
+      fetchAnalytics();
       setShowDetail(false);
     } catch (err: any) {
       console.error('Error deleting task:', err);
@@ -648,15 +617,9 @@ const fetchTasks = async () => {
 
   // Check if user can delete a task
   const canDeleteTask = (task: any): boolean => {
-    // Super admin can delete any task
     if (currentUser?.role === 'super_admin') return true;
-    
-    // Admin can delete tasks in their company
     if (currentUser?.role === 'admin') return true;
-    
-    // Task creator can delete their own tasks
     if (individualTasks.some(t => t.created_by === currentUser?.id)) return true;
-    
     return false;
   };
 
@@ -713,62 +676,44 @@ const fetchTasks = async () => {
     }
   };
 
-const search = searchTerm.toLowerCase();
+  const filteredTasks = tasks.filter((task) => {
+    const search = searchTerm.toLowerCase();
+    const title = task.title?.toLowerCase() || "";
+    const description = task.description?.toLowerCase() || "";
+    const matchesSearch = title.includes(search) || description.includes(search);
+    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
 
-const filteredTasks = tasks.filter((task) => {
-  const title = task.title?.toLowerCase() || "";
-  const description = task.description?.toLowerCase() || "";
+    const relatedIndividuals = individualTasks.filter(
+      (t) => t.title === task.title
+    );
+    const totalAssignees = relatedIndividuals.length;
+    const matchesTaskType =
+      taskTypeFilter === "all" ||
+      (taskTypeFilter === "single" && totalAssignees === 1) ||
+      (taskTypeFilter === "group" && totalAssignees > 1);
 
-  // 🔹 Search filter
-  const matchesSearch =
-    title.includes(search) || description.includes(search);
+    const matchesScope =
+      scopeFilter === "all"
+        ? true
+        : scopeFilter === "assigned"
+        ? relatedIndividuals.some((t) => t.assigned_to_id === currentUser?.id)
+        : true;
 
-  // 🔹 Priority filter
-  const matchesPriority =
-    priorityFilter === "all" || task.priority === priorityFilter;
+    const matchesStatus =
+      statusFilter === "all" ||
+      (relatedIndividuals.length > 0 && relatedIndividuals.every((t) => t.status === statusFilter));
+      
+    return matchesSearch && matchesPriority && matchesTaskType && matchesScope && matchesStatus;
+  });
 
-  // 🔹 Related individuals
-  const relatedIndividuals = individualTasks.filter(
-    (t) => t.title === task.title
-  );
+    const indexOfLastTask = currentPage * usersPerPage;
+    const indexOfFirstTask = indexOfLastTask - usersPerPage;
+    const currentTasks = filteredTasks.slice(indexOfFirstTask, indexOfLastTask);
+    const totalPages = Math.ceil(filteredTasks.length / usersPerPage);
 
-  // 🔹 Task type filter
-  const totalAssignees = relatedIndividuals.length;
-  const matchesTaskType =
-    taskTypeFilter === "all" ||
-    (taskTypeFilter === "single" && totalAssignees === 1) ||
-    (taskTypeFilter === "group" && totalAssignees > 1);
-
-  // 🔹 Scope filter
-  const matchesScope =
-    scopeFilter === "all"
-      ? true
-      : scopeFilter === "assigned"
-      ? relatedIndividuals.some((t) => t.assigned_to_id === currentUser?.id)
-      : true;
-
-  // 🔹 Status filter (matches backend enums)
-  const matchesStatus =
-    statusFilter === "all" || task.status === statusFilter;
-  console.log("Task status from backend:", tasks.map(t => t.status));
-  return (
-    matchesSearch &&
-    matchesPriority &&
-    matchesTaskType &&
-    matchesScope &&
-    matchesStatus
-  );
-});
+    const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
 
-
-
-
-
-
-
-
-  
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -787,7 +732,8 @@ const filteredTasks = tasks.filter((task) => {
   useEffect(() => {
     fetchTasks();
     fetchAnalytics();
-  }, [hasCreatedTasks]);
+  }, [hasCreatedTasks, searchTerm, statusFilter, priorityFilter]);
+
 
   if (loading) {
     return (
@@ -805,10 +751,10 @@ const filteredTasks = tasks.filter((task) => {
           <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
           <span className="text-red-700">{error}</span>
         </div>
-        <Button 
-          variant="secondary" 
-          size="sm" 
-          onClick={fetchTasks} 
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => fetchTasks()}
           className="mt-2"
         >
           Try Again
@@ -824,9 +770,9 @@ const filteredTasks = tasks.filter((task) => {
         {/* Detail Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button 
-              variant="secondary" 
-              size="sm" 
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setShowDetail(false)}
               className="flex items-center"
             >
@@ -835,7 +781,7 @@ const filteredTasks = tasks.filter((task) => {
             </Button>
             <h2 className="text-xl font-semibold text-gray-900">Task Details</h2>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             {/* Always show Create Task button if onCreateTask is provided */}
             {onCreateTask && (
@@ -844,16 +790,16 @@ const filteredTasks = tasks.filter((task) => {
                 Create Task
               </Button>
             )}
-            
+
             {/* Edit Button */}
             {(canAssignTasks() || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
-              <Button 
-                variant="secondary" 
+              <Button
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   const newTitle = prompt('Enter new title:', selectedTask.title);
                   const newDescription = prompt('Enter new description:', selectedTask.description);
-                  
+
                   if (newTitle !== null && newDescription !== null) {
                     handleUpdateTask(selectedTask.title, {
                       title: newTitle.trim() || selectedTask.title,
@@ -866,11 +812,11 @@ const filteredTasks = tasks.filter((task) => {
                 Edit
               </Button>
             )}
-            
+
             {/* Delete Button */}
             {canDeleteTask(selectedTask) && individualTasks.length > 0 && (
-              <Button 
-                variant="secondary" 
+              <Button
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   const taskToDelete = individualTasks[0];
@@ -921,7 +867,7 @@ const filteredTasks = tasks.filter((task) => {
                     <span className="ml-1 capitalize">{selectedTask.priority}</span>
                   </div>
                 </div>
-                
+
                 {selectedTask.description && (
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 mb-2">Description</h4>
@@ -939,11 +885,11 @@ const filteredTasks = tasks.filter((task) => {
                     : 'Your Assignment'
                   }
                 </h4>
-                
+
                 <div className="space-y-3">
                   {selectedTask.assignees.map((assignee, index) => {
                     const isCurrentUserAssignee = currentUser?.id === assignee.assigned_to_id;
-                    
+
                     return (
                       <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center flex-1">
@@ -964,7 +910,7 @@ const filteredTasks = tasks.filter((task) => {
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center space-x-3">
                           {/* Status Display/Selector - All users can change their own status */}
                           {assignee.task_id ? (
@@ -972,7 +918,7 @@ const filteredTasks = tasks.filter((task) => {
                               value={assignee.status}
                               onChange={async (e) => {
                                 const newStatus = e.target.value as 'pending' | 'in_progress' | 'completed';
-                                
+
                                 if (window.confirm(`Update task status to ${newStatus.replace('_', ' ')}?`)) {
                                   if (assignee.task_id) {
                                     await handleUpdateTaskStatus(assignee.task_id, newStatus);
@@ -1021,13 +967,13 @@ const filteredTasks = tasks.filter((task) => {
             <div className="space-y-6">
               <div className="bg-white rounded-lg border p-6">
                 <h4 className="text-lg font-semibold text-gray-900 mb-4">Progress Overview</h4>
-                
+
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Total Assignees</span>
                     <span className="font-semibold text-gray-900">{selectedTask.analytics.total_assignees}</span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-green-600 flex items-center">
                       <CheckCircle className="w-4 h-4 mr-1" />
@@ -1035,7 +981,7 @@ const filteredTasks = tasks.filter((task) => {
                     </span>
                     <span className="font-semibold text-green-600">{selectedTask.analytics.completed}</span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-blue-600 flex items-center">
                       <Play className="w-4 h-4 mr-1" />
@@ -1043,7 +989,7 @@ const filteredTasks = tasks.filter((task) => {
                     </span>
                     <span className="font-semibold text-blue-600">{selectedTask.analytics.in_progress}</span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-yellow-600 flex items-center">
                       <Pause className="w-4 h-4 mr-1" />
@@ -1062,10 +1008,10 @@ const filteredTasks = tasks.filter((task) => {
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${(selectedTask.analytics.completed / selectedTask.analytics.total_assignees) * 100}%` 
+                      style={{
+                        width: `${(selectedTask.analytics.completed / selectedTask.analytics.total_assignees) * 100}%`
                       }}
                     ></div>
                   </div>
@@ -1087,9 +1033,9 @@ const filteredTasks = tasks.filter((task) => {
           <h2 className="text-2xl font-bold text-gray-900">Tasks</h2>
           <p className="text-gray-600">Manage and track your tasks</p>
         </div>
-        
+
         {/* Always show Create Task button if onCreateTask is provided */}
-        {onCreateTask && (
+       {onCreateTask && (currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || canAssignTasks()) && (
           <Button onClick={onCreateTask} className="flex items-center">
             <Plus className="w-4 h-4 mr-2" />
             Create Task
@@ -1179,7 +1125,7 @@ const filteredTasks = tasks.filter((task) => {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <Button
             variant="secondary"
             size="sm"
@@ -1248,9 +1194,9 @@ const filteredTasks = tasks.filter((task) => {
 
       {/* Task Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTasks.map((task, index) => {
+        {currentTasks.map((task, index) => {
           const userTask = getUserTaskForTitle(task.title);
-          
+
           return (
             <div
               key={`${task.title}-${index}`}
@@ -1269,14 +1215,14 @@ const filteredTasks = tasks.filter((task) => {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2" />
                 </div>
-                
+
                 <div className="flex items-center justify-between mb-4">
                   <div className={`px-2 py-1 rounded-full border text-xs font-medium flex items-center ${getPriorityColor(task.priority)}`}>
                     {getPriorityIcon(task.priority)}
                     <span className="ml-1 capitalize">{task.priority}</span>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center justify-between text-sm text-gray-500">
                   <div className="flex items-center">
                     <Calendar className="w-4 h-4 mr-1" />
@@ -1292,8 +1238,8 @@ const filteredTasks = tasks.filter((task) => {
 
               <div className="px-6 pb-4">
                 <div className="flex items-center justify-between">
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1304,18 +1250,18 @@ const filteredTasks = tasks.filter((task) => {
                     <Eye className="w-4 h-4 mr-1" />
                     View Details
                   </Button>
-                  
+
                   <div className="flex items-center space-x-1">
                     {/* Edit button for task creators and admins */}
                     {((canAssignTasks() && hasCreatedTasks) || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
-                      <Button 
-                        variant="secondary" 
+                      <Button
+                        variant="secondary"
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           const newTitle = prompt('Enter new title:', task.title);
                           const newDescription = prompt('Enter new description:', task.description);
-                          
+
                           if (newTitle !== null && newDescription !== null) {
                             handleUpdateTask(task.title, {
                               title: newTitle.trim() || task.title,
@@ -1327,16 +1273,15 @@ const filteredTasks = tasks.filter((task) => {
                         <Edit3 className="w-4 h-4" />
                       </Button>
                     )}
-                    
+
                     {/* Delete button for task creators and admins */}
                     {((canAssignTasks() && hasCreatedTasks) || currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
-                      <Button 
-                        variant="secondary" 
+                      <Button
+                        variant="secondary"
                         size="sm"
                         onClick={async (e) => {
                           e.stopPropagation();
-                          
-                          // Get the individual task ID to delete
+
                           try {
                             const individualTasksData = await tasksAPIExtended.getIndividualTasksByTitle(task.title);
                             if (individualTasksData.length > 0) {
@@ -1358,29 +1303,61 @@ const filteredTasks = tasks.filter((task) => {
             </div>
           );
         })}
-      </div>
+      </div>   {/* <-- closes the task grid */}
+
+{/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex justify-end mt-4 space-x-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => currentPage > 1 && paginate(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+
+              {Array.from({ length: totalPages }, (_, i) => (
+                <Button
+                  key={i}
+                  variant={currentPage === i + 1 ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => paginate(i + 1)}
+                >
+                  {i + 1}
+                </Button>
+              ))}
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => currentPage < totalPages && paginate(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+
 
       {filteredTasks.length === 0 && (
         <div className="text-center py-12">
           <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'No tasks match your search criteria.' : 
-             (!hasCreatedTasks && canAssignTasks()) ? 
+            {searchTerm ? 'No tasks match your search criteria.' :
+             (!hasCreatedTasks && canAssignTasks()) ?
              'You will see both your created tasks and assigned tasks here. Create your first task or check if any tasks have been assigned to you.' :
              'You haven\'t been assigned any tasks yet.'}
           </p>
-          {/* Always show Create Task button if onCreateTask is provided */}
-          {onCreateTask && (
-            <Button onClick={onCreateTask} className="flex items-center justify-center">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Your First Task
-            </Button>
-          )}
+         {onCreateTask && (currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || canAssignTasks()) && (
+          <Button onClick={onCreateTask} className="flex items-center justify-center">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Your First Task
+          </Button>
+        )}
         </div>
       )}
-
-      
 
       {showToast && (
         <Toast

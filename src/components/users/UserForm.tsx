@@ -139,69 +139,146 @@ export const UserForm: React.FC<UserFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
+  // const handleSubmit = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   if (!validateForm()) return;
+  //   setLoading(true);
+
+  //   try {
+  //     const userData: any = {
+  //       full_name: formData.fullName,
+  //       username: formData.username,
+  //       phone_number: formData.phoneNumber,
+  //       ...(formData.password && { password: formData.password }),
+  //       // Change: Use is_active consistently (no change needed here as it's already correct)
+  //       is_active: formData.is_active,
+  //       company_id: Number(formData.companyId),
+  //       role: formData.role,
+  //       can_assign_tasks: formData.canAssignTasks,
+  //     };
+
+  //     const storedAuth = localStorage.getItem("auth");
+  //     const authUser = storedAuth ? JSON.parse(storedAuth) : null;
+  //     const companyId = authUser?.id;
+  //     console.log("hiiii");
+  //     userData.company_id = Number(companyId);
+  //     userData.role = formData.role;
+  //     userData.can_assign_tasks = formData.canAssignTasks;
+
+  //     console.log(userData, authUser);
+
+  //     if (currentUser?.role === "company") {
+  //       console.log("hiiii");
+  //       console.log(companyId);
+  //       if (!companyId) throw new Error("Company user must have a company_id");
+  //     } else if (currentUser?.role === "admin") {
+  //       if (!companyId) throw new Error("Admin user must have a company_id");
+  //       if (formData.role === "user") {
+  //         userData.can_assign_tasks = formData.canAssignTasks;
+  //       } else {
+  //         userData.can_assign_tasks = false;
+  //       }
+  //     } else {
+  //       delete userData.can_assign_tasks;
+  //     }
+
+  //     console.log(userData);
+
+  //     if (mode === "create") {
+  //       await usersAPI.createUser(userData);
+  //     } else if (user) {
+  //       await usersAPI.updateUser(user.id, userData);
+  //     }
+  //     if (onSuccess) onSuccess();
+  //     onClose();
+  //   } catch (error: any) {
+  //     setErrors({
+  //       general:
+  //         error?.response?.data?.detail ||
+  //         error?.message ||
+  //         "Failed to save user",
+  //     });
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-    setLoading(true);
+  e.preventDefault();
+  setErrors({});
 
-    try {
-      const userData: any = {
-        full_name: formData.fullName,
-        username: formData.username,
-        phone_number: formData.phoneNumber,
-        ...(formData.password && { password: formData.password }),
-        // Change: Use is_active consistently (no change needed here as it's already correct)
-        is_active: formData.is_active,
-        company_id: Number(formData.companyId),
-        role: formData.role,
-        can_assign_tasks: formData.canAssignTasks,
-      };
+  if (!validateForm()) return;
+  setLoading(true);
 
-      const storedAuth = localStorage.getItem("auth");
-      const authUser = storedAuth ? JSON.parse(storedAuth) : null;
-      const companyId = authUser?.id;
-      console.log("hiiii");
-      userData.company_id = Number(companyId);
-      userData.role = formData.role;
-      userData.can_assign_tasks = formData.canAssignTasks;
+  try {
+    const userData: any = {
+      full_name: formData.fullName,
+      username: formData.username,
+      phone_number: formData.phoneNumber,
+      ...(formData.password && { password: formData.password }),
+      is_active: formData.is_active,
+      role: formData.role,
+      can_assign_tasks: formData.canAssignTasks,
+    };
 
-      console.log(userData, authUser);
-
-      if (currentUser?.role === "company") {
-        console.log("hiiii");
-        console.log(companyId);
-        if (!companyId) throw new Error("Company user must have a company_id");
-      } else if (currentUser?.role === "admin") {
-        if (!companyId) throw new Error("Admin user must have a company_id");
-        if (formData.role === "user") {
-          userData.can_assign_tasks = formData.canAssignTasks;
-        } else {
-          userData.can_assign_tasks = false;
-        }
-      } else {
-        delete userData.can_assign_tasks;
+    // ✅ Resolve company_id
+    if (currentUser?.role === "super_admin") {
+      if (!formData.companyId) {
+        setErrors({ general: "Please select a company" });
+        setLoading(false);
+        return;
       }
-
-      console.log(userData);
-
-      if (mode === "create") {
-        await usersAPI.createUser(userData);
-      } else if (user) {
-        await usersAPI.updateUser(user.id, userData);
+      userData.company_id = Number(formData.companyId);
+    } else if (currentUser?.role === "admin" || currentUser?.role === "company") {
+      const resolvedCompanyId = Number(
+        currentUser.company_id ?? currentUser.company?.id ?? NaN
+      );
+      if (!resolvedCompanyId || Number.isNaN(resolvedCompanyId)) {
+        setErrors({ general: "Your account is missing a company_id" });
+        setLoading(false);
+        return;
       }
-      if (onSuccess) onSuccess();
-      onClose();
-    } catch (error: any) {
-      setErrors({
-        general:
-          error?.response?.data?.detail ||
-          error?.message ||
-          "Failed to save user",
-      });
-    } finally {
-      setLoading(false);
+      userData.company_id = resolvedCompanyId;
+    } else if (formData.companyId) {
+      userData.company_id = Number(formData.companyId);
     }
-  };
+
+    // ✅ API call
+    if (mode === "create") {
+      await usersAPI.createUser(userData);
+    } else if (user) {
+      await usersAPI.updateUser(user.id, userData);
+    }
+
+    // ✅ Reset form only on create
+    if (mode === "create") {
+      setFormData({
+        fullName: "",
+        username: "",
+        phoneNumber: "",
+        password: "",
+        confirmPassword: "",
+        role: "user",
+        companyId: "",
+        is_active: true,
+        canAssignTasks: false,
+      });
+    }
+
+    if (onSuccess) onSuccess();
+    onClose();
+  } catch (err: any) {
+    setErrors({
+      general:
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Failed to save user",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const roleOptions = getRoleOptions(currentUser);
   const showCompanySelect =
