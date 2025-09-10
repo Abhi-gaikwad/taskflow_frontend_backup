@@ -1,0 +1,15 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://tasksflow-backend-backup.onrender.com/api/$1"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "/",
+      "permanent": false
+    }
+  ]
+}
