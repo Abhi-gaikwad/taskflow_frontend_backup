@@ -1,7 +1,7 @@
 // src/components/tasks/TaskForm.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, User, Tag, AlertCircle, Users, Check, X, Search } from 'lucide-react';
+import { Calendar, User, Tag, AlertCircle, Users, Check, X, Search, Bell } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../common/Button';
@@ -30,6 +30,15 @@ interface UserGroup {
   all: UserData[];
 }
 
+// 🆕 Reminder state interface
+interface ReminderState {
+  enabled: boolean;
+  reminderType: 'BEFORE_DUE' | 'AFTER_CREATION';
+  offsetMinutes: number;
+  isRecurring: boolean;
+  repeatIntervalMinutes: number | undefined;
+}
+
 export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
   const { addNotification } = useApp();
   const { user: currentUser, canAssignTasks, isLoading: authLoading, isAuthenticated } = useAuth();
@@ -55,8 +64,16 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
     description: '',
     priority: 'medium' as Task['priority'],
     dueDate: '',
-    reminderSet: '',
     tags: '',
+  });
+
+  // 🆕 Add reminder state
+  const [reminderData, setReminderData] = useState<ReminderState>({
+    enabled: false,
+    reminderType: 'BEFORE_DUE',
+    offsetMinutes: 60, // Default to 60 minutes
+    isRecurring: false,
+    repeatIntervalMinutes: undefined,
   });
 
   const [showToast, setShowToast] = useState(false);
@@ -215,7 +232,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
     setGroupSelections(newGroupSelections);
   };
 
-  // 🆕 Helper function to create notifications for both creator and assigned users
+  // Helper function to create notifications for both creator and assigned users
   const createNotificationsForTask = async (task: any, assignedUserId: number) => {
     try {
       // Notification for the assigned user
@@ -227,36 +244,31 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
         taskId: task.id?.toString() || '',
         isRead: false,
       });
-
-      // Notification for the creator (current user) - confirmation of successful assignment
-      // if (currentUser?.id && currentUser.id !== assignedUserId) {
-      //   const assignedUserName = getUserNameById(assignedUserId);
-      //   addNotification({
-      //     type: 'task_created', // Different type for creator notifications
-      //     title: 'Task Created Successfully',
-      //     message: `Task "${formData.title}" has been successfully assigned to ${assignedUserName}`,
-      //     userId: currentUser.id.toString(),
-      //     taskId: task.id?.toString() || '',
-      //     isRead: false,
-      //   });
-      // }
-
       console.log(`✅ Notifications created for task ${task.id}: assigned user ${assignedUserId} and creator ${currentUser?.id}`);
     } catch (error) {
       console.error('Error creating notifications:', error);
     }
   };
 
-  // 🆕 Helper function to get user name by ID
+  // Helper function to get user name by ID
   const getUserNameById = (userId: number): string => {
     const user = userGroups.all.find(u => u.id === userId);
     return user ? getUserDisplayName(user) : `User ${userId}`;
   };
 
+  // 🆕 Updated createTasksForUsers function to include reminders
   const createTasksForUsers = async (userIds: number[]) => {
     try {
       console.log('[TaskForm] Creating bulk tasks for users:', userIds);
       
+      // 🆕 Construct the reminders payload if enabled
+      const remindersPayload = reminderData.enabled ? [{
+        reminder_type: reminderData.reminderType,
+        offset_minutes: reminderData.offsetMinutes,
+        is_recurring: reminderData.isRecurring,
+        repeat_interval_minutes: reminderData.isRecurring ? reminderData.repeatIntervalMinutes : undefined
+      }] : [];
+
       const taskPayload = {
         title: formData.title.trim(),
         description: formData.description.trim() || "",
@@ -264,6 +276,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
         due_date: formData.dueDate ? new Date(formData.dueDate).toISOString() : undefined,
         priority: formData.priority,
         company_id: currentUser?.company_id,
+        reminders: remindersPayload, // 🆕 Add reminders to payload
       };
 
       console.log('[TaskForm] Task payload:', taskPayload);
@@ -272,7 +285,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
       
       console.log('[TaskForm] Bulk task creation result:', bulkResult);
       
-      // 🆕 Create notifications for both assigned users and creator
       for (const task of bulkResult.successful) {
         await createNotificationsForTask(task, task.assigned_to_id);
       }
@@ -288,6 +300,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
     } catch (error: any) {
       console.warn('[TaskForm] Bulk API failed, falling back to individual task creation:', error.message);
       
+      // 🆕 Construct the reminders payload for individual tasks
+      const remindersPayload = reminderData.enabled ? [{
+        reminder_type: reminderData.reminderType,
+        offset_minutes: reminderData.offsetMinutes,
+        is_recurring: reminderData.isRecurring,
+        repeat_interval_minutes: reminderData.isRecurring ? reminderData.repeatIntervalMinutes : undefined
+      }] : [];
+      
       const results = {
         successful: [] as number[],
         failed: [] as { userId: number; error: string }[]
@@ -302,6 +322,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
             due_date: formData.dueDate ? new Date(formData.dueDate).toISOString() : undefined,
             priority: formData.priority,
             company_id: currentUser?.company_id,
+            reminders: remindersPayload, // 🆕 Add reminders to payload
           };
 
           console.log('[TaskForm] Creating individual task:', taskPayload);
@@ -310,7 +331,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
 
           results.successful.push(userId);
 
-          // 🆕 Create notifications for both assigned user and creator
           await createNotificationsForTask(newTask, userId);
 
         } catch (error: any) {
@@ -327,97 +347,120 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
+    e.preventDefault();
+    setIsLoading(true);
 
-  console.log('[TaskForm] Form submission started');
+    console.log('[TaskForm] Form submission started');
 
-  if (!formData.title.trim()) {
-    setToastMessage('Task title is required');
-    setToastType('error');
-    setShowToast(true);
-    setIsLoading(false);
-    return;
-  }
-
-  if (selectedUsers.size === 0) {
-    setToastMessage('Please select at least one user to assign the task to');
-    setToastType('error');
-    setShowToast(true);
-    setIsLoading(false);
-    return;
-  }
-
-  if (!formData.dueDate) {
-    setToastMessage('Due date is required');
-    setToastType('error');
-    setShowToast(true);
-    setIsLoading(false);
-    return;
-  }
-
-  try {
-    const userIds = Array.from(selectedUsers);
-    console.log('[TaskForm] Creating tasks for users:', userIds);
-    
-    const results = await createTasksForUsers(userIds);
-
-    console.log('[TaskForm] Task creation results:', results);
-
-    const taskTitle = formData.title; // Store before reset
-
-    // Reset form
-    setFormData({
-      title: '',
-      description: '',
-      priority: 'medium' as Task['priority'],
-      dueDate: '',
-      reminderSet: '',
-      tags: '',
-    });
-    setSelectedUsers(new Set());
-    setGroupSelections({
-      allAdmins: false,
-      allUsers: false,
-      everyone: false
-    });
-
-    // ✅ Show success/failure alerts in addition to toast
-    if (results.failed.length === 0) {
-      setToastMessage(`Task "${taskTitle}" successfully assigned to ${results.successful.length} user! Notifications sent to all parties.`);
-      setToastType('success');
-      window.alert(`✅ Task "${taskTitle}" assigned successfully to ${results.successful.length} user!`);
-    } else if (results.successful.length === 0) {
-      setToastMessage(`Failed to assign task to any users. Please try again.`);
+    if (!formData.title.trim()) {
+      setToastMessage('Task title is required');
       setToastType('error');
-      window.alert(`❌ Failed to assign task. Please try again.`);
-    } else {
-      setToastMessage(`Task assigned to ${results.successful.length} user(s). ${results.failed.length} assignment(s) failed. Notifications sent for successful assignments.`);
-      setToastType('success');
-      window.alert(`⚠️ Task assigned to ${results.successful.length} user(s), but ${results.failed.length} failed.`);
+      setShowToast(true);
+      setIsLoading(false);
+      return;
     }
 
-    setShowToast(true);
-
-    if (results.successful.length > 0) {
-      onSubmit();
-      setTimeout(() => {
-        onClose();
-      }, 2000);
+    if (selectedUsers.size === 0) {
+      setToastMessage('Please select at least one user to assign the task to');
+      setToastType('error');
+      setShowToast(true);
+      setIsLoading(false);
+      return;
     }
 
-  } catch (error: any) {
-    console.error('[TaskForm] Task creation error:', error);
-    setToastMessage('Error creating tasks: ' + (error.message || 'Unknown error'));
-    setToastType('error');
-    setShowToast(true);
+    if (!formData.dueDate) {
+      setToastMessage('Due date is required');
+      setToastType('error');
+      setShowToast(true);
+      setIsLoading(false);
+      return;
+    }
 
-    // ❌ Error alert
-    window.alert(`❌ Error creating tasks: ${error.message || 'Unknown error'}`);
-  } finally {
-    setIsLoading(false);
-  }
-};
+    // 🆕 Validate reminder data if enabled
+    if (reminderData.enabled) {
+      if (reminderData.offsetMinutes <= 0) {
+        setToastMessage('Reminder offset must be a positive number of minutes.');
+        setToastType('error');
+        setShowToast(true);
+        setIsLoading(false);
+        return;
+      }
+      if (reminderData.isRecurring && (!reminderData.repeatIntervalMinutes || reminderData.repeatIntervalMinutes <= 0)) {
+        setToastMessage('Recurring reminders require a positive repeat interval.');
+        setToastType('error');
+        setShowToast(true);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const userIds = Array.from(selectedUsers);
+      console.log('[TaskForm] Creating tasks for users:', userIds);
+      
+      const results = await createTasksForUsers(userIds);
+
+      console.log('[TaskForm] Task creation results:', results);
+
+      const taskTitle = formData.title; // Store before reset
+
+      // Reset form
+      setFormData({
+        title: '',
+        description: '',
+        priority: 'medium' as Task['priority'],
+        dueDate: '',
+        tags: '',
+      });
+      setSelectedUsers(new Set());
+      setGroupSelections({
+        allAdmins: false,
+        allUsers: false,
+        everyone: false
+      });
+      // 🆕 Reset reminder state
+      setReminderData({
+        enabled: false,
+        reminderType: 'BEFORE_DUE',
+        offsetMinutes: 60,
+        isRecurring: false,
+        repeatIntervalMinutes: undefined,
+      });
+
+      if (results.failed.length === 0) {
+        setToastMessage(`Task "${taskTitle}" successfully assigned to ${results.successful.length} user! Notifications sent to all parties.`);
+        setToastType('success');
+        window.alert(`✅ Task "${taskTitle}" assigned successfully to ${results.successful.length} user!`);
+      } else if (results.successful.length === 0) {
+        setToastMessage(`Failed to assign task to any users. Please try again.`);
+        setToastType('error');
+        window.alert(`❌ Failed to assign task. Please try again.`);
+      } else {
+        setToastMessage(`Task assigned to ${results.successful.length} user(s). ${results.failed.length} assignment(s) failed. Notifications sent for successful assignments.`);
+        setToastType('success');
+        window.alert(`⚠️ Task assigned to ${results.successful.length} user(s), but ${results.failed.length} failed.`);
+      }
+
+      setShowToast(true);
+
+      if (results.successful.length > 0) {
+        onSubmit();
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      }
+
+    } catch (error: any) {
+      console.error('[TaskForm] Task creation error:', error);
+      setToastMessage('Error creating tasks: ' + (error.message || 'Unknown error'));
+      setToastType('error');
+      setShowToast(true);
+
+      window.alert(`❌ Error creating tasks: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
 
   const getUserDisplayName = (user: UserData) => {
@@ -581,7 +624,86 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
           </div>
         </div>
 
-        {/* Row 4: User Assignment */}
+        {/* 🆕 Row 4: Reminder Section */}
+        <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="flex items-center mb-3">
+            <input
+              type="checkbox"
+              checked={reminderData.enabled}
+              onChange={(e) => setReminderData({ ...reminderData, enabled: e.target.checked })}
+              className="mr-2 h-4 w-4 text-blue-600"
+              disabled={isLoading}
+            />
+            <label className="text-sm font-medium text-gray-700 flex items-center">
+              <Bell className="w-4 h-4 mr-1" />
+              Enable Task Reminder
+            </label>
+          </div>
+
+          {reminderData.enabled && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Reminder Type
+                  </label>
+                  <select
+                    value={reminderData.reminderType}
+                    onChange={(e) => setReminderData({ ...reminderData, reminderType: e.target.value as ReminderState['reminderType'] })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    disabled={isLoading}
+                  >
+                    <option value="BEFORE_DUE">Before Due Date</option>
+                    <option value="AFTER_CREATION">After Creation</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Offset (in minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={reminderData.offsetMinutes}
+                    onChange={(e) => setReminderData({ ...reminderData, offsetMinutes: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    placeholder="e.g. 60"
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={reminderData.isRecurring}
+                    onChange={(e) => setReminderData({ ...reminderData, isRecurring: e.target.checked })}
+                    className="mr-2 h-4 w-4 text-blue-600"
+                    disabled={isLoading}
+                  />
+                  <span className="text-sm font-medium text-gray-700">Recurring Reminder</span>
+                </label>
+                {reminderData.isRecurring && (
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Repeat Interval (in minutes)
+                    </label>
+                    <input
+                      type="number"
+                      value={reminderData.repeatIntervalMinutes || ''}
+                      onChange={(e) => setReminderData({ ...reminderData, repeatIntervalMinutes: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="e.g. 1440 (for daily)"
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Row 5: User Assignment */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <label className="block text-sm font-medium text-gray-700">
@@ -816,7 +938,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onSubmit, onClose }) => {
           )}
         </div>
 
-        {/* Row 5: Action Buttons */}
+        {/* Row 6: Action Buttons */}
         <div className="flex justify-end space-x-3 pt-4">
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
             Cancel
