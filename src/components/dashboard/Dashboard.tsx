@@ -4,7 +4,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useApp } from '../../contexts/AppContext';
 import CompanyCreationForm from '../admin/CompanyCreationForm';
 import { Modal } from '../common/Modal';
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom"; // Import useNavigate
+import { UserForm } from '../users/UserForm'; // <--- Check and adjust this path
+import { TaskForm } from '../tasks/TaskForm'; // <--- Check and adjust this path
 import { usersAPI, companyAPI, tasksAPI, notificationsAPI } from '../../services/api';
 import { analyticsAPI } from '../../services/api';
 
@@ -25,7 +27,7 @@ import {
   Mail,
   Plus,
   CheckCircle,
-  User, 
+  User,
 } from 'lucide-react';
 
 export interface UserTaskStats {
@@ -140,6 +142,7 @@ export interface AnalyticsResponse {
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const { tasks = [], notifications = [], setTasks } = useApp();
+  const navigate = useNavigate(); // Define the navigate hook
 
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
@@ -162,7 +165,24 @@ export const Dashboard: React.FC = () => {
   const [usersLoading, setUsersLoading] = useState(false);
   const [companiesLoading, setCompaniesLoading] = useState(false);
 
+  // Define new state variables for modals
   const [showCreateCompanyModal, setShowCreateCompanyModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+
+  // Define new handler functions
+  const handleAddUserSuccess = () => {
+    console.log("User added successfully, closing modal and reloading users");
+    setShowAddUserModal(false);
+    loadUsers();
+  };
+
+  const handleCreateTaskSuccess = () => {
+    console.log("Task created successfully, closing modal");
+    setShowTaskModal(false);
+    // Reload dashboard data to get updated task stats
+    // The useEffect will handle this based on its dependencies
+  };
 
   const loadUsers = async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'company')) {
@@ -1051,42 +1071,138 @@ return (
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+    {/* Quick Actions */}
+<div className="bg-white rounded-lg shadow">
+  <div className="p-6 border-b border-gray-200">
+    <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+  </div>
+  <div className="p-6">
+    <div className="space-y-3">
+      {/* ================= COMPANY ROLE ================= */}
+      {user?.role === "company" && (
+        <button
+          onClick={() => setShowAddUserModal(true)}
+          className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+        >
+          <div className="flex items-center">
+            <UserPlus className="w-5 h-5 text-blue-600 mr-3" />
+            <span className="text-blue-900 font-medium">Add User</span>
           </div>
-          <div className="p-6">
-            <div className="space-y-3">
-              <button className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
-                <div className="flex items-center">
-                  <CheckSquare className="w-5 h-5 text-blue-600 mr-3" />
-                  <span className="text-blue-900 font-medium">Create New Task</span>
-                </div>
-              </button>
+        </button>
+      )}
 
-              {user?.role === 'super_admin' && (
-                <button
-                  onClick={() => {
-                    console.log("Create New Company button clicked from Quick Actions!");
-                    setShowCreateCompanyModal(true);
-                  }}
-                  className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors flex items-center"
-                >
-                  <Building className="w-5 h-5 text-green-600 mr-3" />
-                  <span className="text-green-900 font-medium">Create New Company</span>
-                </button>
-              )}
-
-              <button className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
-                <div className="flex items-center">
-                  <Bell className="w-5 h-5 text-gray-600 mr-3" />
-                  <span className="text-gray-900 font-medium">View Notifications</span>
-                </div>
-              </button>
+      {/* ================= ADMIN ROLE ================= */}
+      {user?.role === "admin" && (
+        <>
+          {/* Add User */}
+          <button
+            onClick={() => setShowAddUserModal(true)}
+            className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+          >
+            <div className="flex items-center">
+              <UserPlus className="w-5 h-5 text-blue-600 mr-3" />
+              <span className="text-blue-900 font-medium">Add User</span>
             </div>
-          </div>
-        </div>
+          </button>
+
+          {/* Create New Task */}
+          <button
+            onClick={() => setShowTaskModal(true)}
+            className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+          >
+            <div className="flex items-center">
+              <CheckSquare className="w-5 h-5 text-green-600 mr-3" />
+              <span className="text-green-900 font-medium">Create New Task</span>
+            </div>
+          </button>
+
+          {/* Notifications */}
+          <button
+            onClick={() => navigate("/notifications")}
+            className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <div className="flex items-center">
+              <Bell className="w-5 h-5 text-gray-600 mr-3" />
+              <span className="text-gray-900 font-medium">View Notifications</span>
+            </div>
+          </button>
+        </>
+      )}
+
+      {/* ================= SIMPLE USER ROLE ================= */}
+      {user?.role === "user" && (
+        <>
+          {/* Check Tasks */}
+          <button
+            onClick={() => navigate("/tasks")}
+            className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+          >
+            <div className="flex items-center">
+              <CheckSquare className="w-5 h-5 text-blue-600 mr-3" />
+              <span className="text-blue-900 font-medium">Check My Tasks</span>
+            </div>
+          </button>
+
+          {/* Notifications */}
+          <button
+            onClick={() => navigate("/notifications")}
+            className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <div className="flex items-center">
+              <Bell className="w-5 h-5 text-gray-600 mr-3" />
+              <span className="text-gray-900 font-medium">View Notifications</span>
+            </div>
+          </button>
+        </>
+      )}
+
+      {/* ================= SUPER ADMIN ROLE ================= */}
+      {user?.role === "super_admin" && (
+        <button
+          onClick={() => setShowCreateCompanyModal(true)}
+          className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors flex items-center"
+        >
+          <Building className="w-5 h-5 text-green-600 mr-3" />
+          <span className="text-green-900 font-medium">Create New Company</span>
+        </button>
+      )}
+    </div>
+  </div>
+</div>
+{/* Add User Modal */}
+<Modal
+  isOpen={showAddUserModal}
+  title="Add New User"
+  onClose={() => setShowAddUserModal(false)}
+>
+  <UserForm
+    mode="create"
+    onSuccess={handleAddUserSuccess}
+    onClose={() => setShowAddUserModal(false)}
+  />
+</Modal>
+
+<Modal
+  isOpen={showTaskModal}
+  title="Create New Task"
+  onClose={() => setShowTaskModal(false)}
+>
+  <TaskForm // Corrected component name here
+    onSuccess={handleCreateTaskSuccess} // Corrected function name
+    onCancel={() => setShowTaskModal(false)}
+  />
+</Modal>
+
+<Modal
+  isOpen={showCreateCompanyModal}
+  title="Create New Company"
+  onClose={() => setShowCreateCompanyModal(false)}
+>
+  <CompanyCreationForm
+    onSuccess={handleCreateCompanySuccess}
+    onCancel={() => setShowCreateCompanyModal(false)}
+  />
+</Modal>
       </div>
 
       {/* Super Admin: Companies List */}
