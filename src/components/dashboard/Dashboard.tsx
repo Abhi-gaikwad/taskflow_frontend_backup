@@ -1071,7 +1071,7 @@ return (
           </div>
         </div>
 
-    {/* Quick Actions */}
+{/* Quick Actions */}
 <div className="bg-white rounded-lg shadow">
   <div className="p-6 border-b border-gray-200">
     <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
@@ -1094,7 +1094,6 @@ return (
       {/* ================= ADMIN ROLE ================= */}
       {user?.role === "admin" && (
         <>
-          {/* Add User */}
           <button
             onClick={() => setShowAddUserModal(true)}
             className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1105,7 +1104,6 @@ return (
             </div>
           </button>
 
-          {/* Create New Task */}
           <button
             onClick={() => setShowTaskModal(true)}
             className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
@@ -1116,7 +1114,6 @@ return (
             </div>
           </button>
 
-          {/* Notifications */}
           <button
             onClick={() => navigate("/notifications")}
             className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1129,10 +1126,9 @@ return (
         </>
       )}
 
-      {/* ================= SIMPLE USER ROLE ================= */}
+      {/* ================= USER ROLE ================= */}
       {user?.role === "user" && (
         <>
-          {/* Check Tasks */}
           <button
             onClick={() => navigate("/tasks")}
             className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1143,7 +1139,6 @@ return (
             </div>
           </button>
 
-          {/* Notifications */}
           <button
             onClick={() => navigate("/notifications")}
             className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1159,11 +1154,16 @@ return (
       {/* ================= SUPER ADMIN ROLE ================= */}
       {user?.role === "super_admin" && (
         <button
-          onClick={() => setShowCreateCompanyModal(true)}
-          className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors flex items-center"
+          onClick={() => {
+            console.log("Create company button clicked!");
+            setShowCreateCompanyModal(true);
+          }}
+          className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
         >
-          <Building className="w-5 h-5 text-green-600 mr-3" />
-          <span className="text-green-900 font-medium">Create New Company</span>
+          <div className="flex items-center">
+            <Building className="w-5 h-5 text-green-600 mr-3" />
+            <span className="text-green-900 font-medium">Create New Company</span>
+          </div>
         </button>
       )}
     </div>
@@ -1181,14 +1181,13 @@ return (
     onClose={() => setShowAddUserModal(false)}
   />
 </Modal>
-
 <Modal
   isOpen={showTaskModal}
   title="Create New Task"
   onClose={() => setShowTaskModal(false)}
 >
-  <TaskForm // Corrected component name here
-    onSuccess={handleCreateTaskSuccess} // Corrected function name
+  <TaskForm
+    onSuccess={handleCreateTaskSuccess}
     onCancel={() => setShowTaskModal(false)}
   />
 </Modal>
@@ -1291,16 +1290,18 @@ return (
       )}
 
       {/* Create Company Modal */}
-      <Modal
-        isOpen={showCreateCompanyModal}
-        title="Create New Company"
-        onClose={() => setShowCreateCompanyModal(false)}
-      >
-        <CompanyCreationForm
-          onSuccess={handleCreateCompanySuccess}
-          onCancel={() => setShowCreateCompanyModal(false)}
-        />
-      </Modal>
+    {/* <Modal
+  isOpen={showCreateCompanyModal}
+  title="Create New Company"
+  onClose={() => setShowCreateCompanyModal(false)}
+>
+  <div onClick={(e) => e.stopPropagation()}>
+    <CompanyCreationForm
+      onSuccess={handleCreateCompanySuccess}
+      onCancel={() => setShowCreateCompanyModal(false)}
+    />
+  </div>
+</Modal> */}
     </div>
   );
 };
